@@ -1,0 +1,100 @@
+{
+  "common": {
+    "appName": "Loyalty Program",
+    "loading": "Loading...",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close",
+    "confirm": "Confirm",
+    "error": "Error",
+    "success": "Success",
+    "help": "Help",
+    "language": "Language"
+  },
+  "languageSelect": {
+    "title": "Choose Your Language",
+    "subtitle": "Select your preferred language",
+    "continue": "Continue"
+  },
+  "help": {
+    "title": "How It Works",
+    "step1Title": "Buy Our Products",
+    "step1Description": "Purchase any Biolastic or Nirva product",
+    "step2Title": "Find Your Code",
+    "step2Description": "Look for the 12-digit code inside the packet or on bottles",
+    "step3Title": "Enter & Win",
+    "step3Description": "Enter your code to win instant cashback and a chance at bumper prizes!",
+    "gotIt": "Got it!"
+  },
+  "scan": {
+    "title": "Enter Your Code to Win Cashback!",
+    "placeholder": "Enter 12-digit code",
+    "submit": "Check Code",
+    "invalid": "Invalid code. Please try again.",
+    "used": "This code has already been used.",
+    "expired": "This code has expired.",
+    "loginPrompt": "Already have an account?",
+    "loginButton": "Login"
+  },
+  "scratch": {
+    "title": "Congratulations!",
+    "subtitle": "Scratch to see your reward!",
+    "won": "You won",
+    "cashback": "Cashback",
+    "tickets": "Lucky Draw Tickets",
+    "claim": "Claim Your Reward!",
+    "scratchHere": "🎁 Scratch Here 🎁",
+    "ticketSingle": "+ 1 Lucky Draw Ticket",
+    "ticketPlural": "+ {count} Lucky Draw Tickets",
+    "prizeInfo": "To Win Microoven, Inducqtion Cooktop & More!"
+  },
+  "auth": {
+    "enterPhone": "Enter your WhatsApp Number",
+    "phoneLabel": "WhatsApp Number",
+    "phonePlaceholder": "10-digit WhatsApp Number",
+    "whatsappDisclaimer": "You will receive an OTP on this WhatsApp number.",
+    "getOTP": "Get OTP",
+    "enterOTP": "Enter the 4-digit OTP sent to your WhatsApp",
+    "otpLabel": "OTP Code",
+    "verify": "Verify & Login",
+    "resendOTP": "Resend OTP",
+    "changeNumber": "Change Number",
+    "enterName": "What's your name?",
+    "nameLabel": "Your Name",
+    "namePlaceholder": "Enter your name"
+  },
+  "dashboard": {
+    "welcome": "Welcome",
+    "wallet": "Your Wallet",
+    "tickets": "Your Lucky Draw Tickets",
+    "redeemGifts": "Redeem Gifts",
+    "seePrizes": "See Monthly Prizes",
+    "scanAnother": "Scan Another Code"
+  },
+  "redeem": {
+    "title": "Redeem Rewards",
+    "yourBalance": "Your Balance",
+    "insufficientBalance": "Insufficient balance",
+    "selectProduct": "Select Product",
+    "confirmRedemption": "Confirm Redemption",
+    "redeemFor": "Redeem for",
+    "address": "Delivery Address",
+    "placeOrder": "Place Order",
+    "orderSuccess": "Order placed successfully!",
+    "newBalance": "Your new balance"
+  },
+  "profile": {
+    "title": "My Profile",
+    "phone": "Phone Number",
+    "name": "Name",
+    "address": "Shipping Address",
+    "language": "Language",
+    "logout": "Logout"
+  },
+  "errors": {
+    "network": "Network error. Please check your connection.",
+    "rateLimited": "Too many attempts. Please try again later.",
+    "unknown": "Something went wrong. Please try again."
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "gifts": [
+    {
+      "id": 1,
+      "name": "Pressure Cooker",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "1st Prize",
+      "icon": "🍲"
+    },
+    {
+      "id": 2,
+      "name": "Mixer Grinder",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "2nd Prize",
+      "icon": "🥤"
+    },
+    {
+      "id": 3,
+      "name": "Electric Kettle",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "3rd Prize",
+      "icon": "☕"
+    },
+    {
+      "id": 4,
+      "name": "Rice Cooker",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "4th Prize",
+      "icon": "🍚"
+    },
+    {
+      "id": 5,
+      "name": "Air Fryer",
+      "image": "/src/assets/gifts/air-fryer.jpg",
+      "points": "5th Prize",
+      "icon": "🍟"
+    },
+    {
+      "id": 6,
+      "name": "Water Purifier",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "6th Prize",
+      "icon": "💧"
+    },
+    {
+      "id": 7,
+      "name": "Toaster",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "7th Prize",
+      "icon": "🍞"
+    },
+    {
+      "id": 8,
+      "name": "Iron Box",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "8th Prize",
+      "icon": "👔"
+    },
+    {
+      "id": 9,
+      "name": "Vacuum Cleaner",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "9th Prize",
+      "icon": "🧹"
+    },
+    {
+      "id": 10,
+      "name": "Microwave Oven",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "10th Prize",
+      "icon": "🔥"
+    }
+  ]
+}
