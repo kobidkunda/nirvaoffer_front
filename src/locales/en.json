@@ -35,7 +35,10 @@
     "used": "This code has already been used.",
     "expired": "This code has expired.",
     "loginPrompt": "Already have an account?",
-    "loginButton": "Login"
+    "loginButton": "Login",
+    "scanButton": "Scan QR Code",
+    "orEnterCode": "Or Enter Code Below",
+    "scannerPrompt": "Point your camera at the QR code"
   },
   "scratch": {
     "title": "Congratulations!",
@@ -95,6 +98,9 @@
   "errors": {
     "network": "Network error. Please check your connection.",
     "rateLimited": "Too many attempts. Please try again later.",
-    "unknown": "Something went wrong. Please try again."
+    "unknown": "Something went wrong. Please try again.",
+    "cameraPermission": "Camera permission denied. Please allow camera access in your browser settings.",
+    "cameraNotFound": "No camera found on this device.",
+    "cameraError": "Could not initialize camera. Please try again."
   }
 }

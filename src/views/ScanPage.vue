@@ -19,6 +19,10 @@ import BaseButton from '@/components/common/BaseButton.vue'
 import BaseInput from '@/components/common/BaseInput.vue'
 import giftsData from '@/data/gifts.json'
 
+// *** NEW: Import QR Scanner ***
+import { QrcodeStream } from 'vue-qrcode-reader'
+// *** FIX: REMOVED the incorrect 'style.css' import line ***
+
 
 const router = useRouter()
 const walletStore = useWalletStore()
@@ -30,13 +34,20 @@ const step = ref('scan')
 const scannedCode = ref('')
 const loading = ref(false)
 const error = ref('') // For scan validation
-const otpError = ref('') // *** NEW: For OTP modal errors ***
+const otpError = ref('')
 const showOTPModal = ref(false)
 const showHelpModal = ref(false)
 const showLanguageModal = ref(false)
 const loginMode = ref(false)
 const honeypot = ref('')
 const gifts = ref(giftsData.gifts)
+
+// *** NEW: Refs for QR Scanner ***
+const showScanner = ref(false)
+const scannerError = ref('')
+
+// *** FIX: Add local ref to keep reward visible during navigation ***
+const localPendingReward = ref(null)
 
 
 // Swiper modules
@@ -47,6 +58,47 @@ onMounted(() => {
   console.log('ScanPage mounted')
 })
 
+// *** NEW: Function to open scanner ***
+const openScanner = () => {
+  error.value = ''
+  scannerError.value = ''
+  showScanner.value = true
+}
+
+// *** NEW: Function to close scanner ***
+const closeScanner = () => {
+  showScanner.value = false
+}
+
+// *** NEW: Handle successful QR scan ***
+const onDecode = (decodedString) => {
+  closeScanner()
+  if (decodedString && /^[A-Z0-9]{12}$/i.test(decodedString)) {
+    scannedCode.value = decodedString.toUpperCase()
+    validateCode() // Auto-submit on valid scan
+  } else if (decodedString) {
+    // Scanned something, but it's not the right format
+    scannedCode.value = decodedString // Show it to the user
+    error.value = t('scan.invalid') // Show invalid error
+  }
+}
+
+// *** NEW: Handle camera initialization and permissions ***
+const onScannerInit = async (promise) => {
+  scannerError.value = ''
+  try {
+    await promise
+  } catch (err) {
+    console.error(err)
+    if (err.name === 'NotAllowedError') {
+      scannerError.value = t('errors.cameraPermission')
+    } else if (err.name === 'NotFoundError') {
+      scannerError.value = t('errors.cameraNotFound')
+    } else {
+      scannerError.value = t('errors.cameraError')
+    }
+  }
+}
 
 const validateCode = async () => {
   error.value = ''
@@ -60,33 +112,19 @@ const validateCode = async () => {
   }
   loading.value = true
   try {
-    // *** FIX: Assuming rewardAPI.validateCode throws on non-2xx status ***
-    // and returns response.data on success.
     const response = await rewardAPI.validateCode(scannedCode.value)
     
-    /* *** FIX: Removed buggy block ***
-      The original 'if (response.status !== 200)' block was here.
-      It was buggy ('err' was not defined) and this logic
-      is correctly handled by the 'catch' block.
-    */
-    
+    // *** FIX: Set both store and local reward ***
     walletStore.setPendingReward(response)
+    localPendingReward.value = response
+    
     step.value = 'scratch'
   } catch (err) {
-
-
     if (err.response && err.response.status === 404) {
-
-
-      error.value = 'The voucher code is invalid'
-
-
+      error.value = t('scan.invalid') // Use specific error
     } else {
      error.value = err.message || t('errors.unknown')
     }
-     
-    // This was the original logic, which is fine.
-    // error.value = err.message || t('errors.unknown')
   } finally {
     loading.value = false
   }
@@ -113,24 +151,23 @@ const handleLoginClick = () => {
 
 const handleOTPSuccess = async ({ phoneNumber, otpCode }) => {
   loading.value = true
-  otpError.value = '' // *** FIX: Clear previous OTP error ***
-  error.value = '' // Clear main page error
+  otpError.value = '' 
+  error.value = ''
   try {
     const result = await authStore.loginWithOTP(phoneNumber, otpCode)
     if (result.success) {
       showOTPModal.value = false
-      otpError.value = '' // Clear error on success
-      if (!loginMode.value && walletStore.pendingReward) {
+      otpError.value = ''
+      // *** FIX: Check localPendingReward ***
+      if (!loginMode.value && localPendingReward.value) {
         await claimReward()
       } else {
         await router.push('/dashboard')
       }
     } else {
-      // *** FIX: Set otpError, not error, to show in modal ***
       otpError.value = result.error || 'Login failed'
     }
   } catch (err) {
-    // *** FIX: Set otpError, not error, to show in modal ***
     otpError.value = err.message || 'Verification failed'
   } finally {
     loading.value = false
@@ -139,19 +176,21 @@ const handleOTPSuccess = async ({ phoneNumber, otpCode }) => {
 
 
 const claimReward = async () => {
-  if (!walletStore.pendingReward) return
+  // *** FIX: Check localPendingReward ***
+  if (!localPendingReward.value) return
   loading.value = true
   try {
-    const response = await rewardAPI.claimReward(walletStore.pendingReward.codeToken)
+    // *** FIX: Use token from local reward ***
+    const response = await rewardAPI.claimReward(localPendingReward.value.codeToken)
     if (response.new_wallet_balance !== undefined) {
       walletStore.syncWallet({
         balance: response.new_wallet_balance,
-        lucky_draw_tickets: response.lucky_draw_tickets || walletStore.pendingReward.tickets
+        // *** FIX: Use tickets from local reward as fallback ***
+        lucky_draw_tickets: response.lucky_draw_tickets || localPendingReward.value.tickets
       })
     }
     await router.push('/dashboard')
   } catch (err) {
-    // This error is for the claim step, so setting main 'error' is ok
     error.value = err.message || t('errors.unknown')
   } finally {
     loading.value = false
@@ -287,6 +326,20 @@ const claimReward = async () => {
         >
           <div class="form-glow"></div>
           
+          <motion.button
+            class="scan-qr-button"
+            @click="openScanner"
+            :whileHover="{ scale: 1.02, backgroundColor: '#f0fdf4' }"
+            :whileTap="{ scale: 0.98 }"
+          >
+            <span class="scan-icon">📷</span>
+            <strong>{{ t('scan.scanButton') }}</strong>
+          </motion.button>
+          
+          <div class="divider or-divider">
+            <span>{{ t('scan.orEnterCode') }}</span>
+          </div>
+          
           <input v-model="honeypot" type="text" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off" />
           
           <div class="input-wrapper">
@@ -357,9 +410,9 @@ const claimReward = async () => {
       
       <div v-if="step === 'scratch'" class="scratch-container">
         <ScratchCard
-          v-if="walletStore.pendingReward"
-          :cashback-amount="walletStore.pendingReward.cashbackAmount"
-          :tickets="walletStore.pendingReward.tickets"
+          v-if="localPendingReward"
+          :cashback-amount="localPendingReward.cashbackAmount"
+          :tickets="localPendingReward.tickets"
           @revealed="() => {}"
           @claim="handleClaim"
         />
@@ -380,6 +433,19 @@ const claimReward = async () => {
       <div class="spinner-ring"></div>
       <p>{{ t('common.loading') }}</p>
     </div>
+
+    <div v-if="showScanner" class="scanner-modal">
+      <QrcodeStream @decode="onDecode" @init="onScannerInit" class="scanner-video" />
+      <button @click="closeScanner" class="close-scanner-btn">✕</button>
+      <div class="scanner-overlay-content">
+        <div class="scanner-box"></div>
+        <p>{{ t('scan.scannerPrompt') }}</p>
+        <div v-if="scannerError" class="scanner-error-display">
+          {{ scannerError }}
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -520,6 +586,12 @@ const claimReward = async () => {
   text-align: center;
 }
 
+.scratch-container {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
 
 /* Prize Badge */
 .prize-badge {
@@ -579,12 +651,11 @@ const claimReward = async () => {
 }
 
 
-/* *** FIX: Replaced .gift-icon with .gift-image *** */
 .gift-image {
-  width: 90px; /* A good size for the card */
+  width: 90px;
   height: 90px;
   object-fit: contain;
-  margin: 0 auto 6px auto; /* Center it and add margin-bottom */
+  margin: 0 auto 6px auto;
   display: block;
 }
 
@@ -662,6 +733,35 @@ const claimReward = async () => {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
+}
+
+
+/* *** NEW: Scan QR Button *** */
+.scan-qr-button {
+  width: 100%;
+  padding: 14px;
+  background: white;
+  border: 3px solid #10b981;
+  border-radius: 12px;
+  color: #10b981;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.scan-icon {
+  font-size: 20px;
+}
+
+/* *** NEW: "Or" Divider *** */
+.divider.or-divider {
+  margin: 20px 0;
 }
 
 
@@ -871,6 +971,89 @@ const claimReward = async () => {
   font-weight: 600;
 }
 
+/* *** NEW: QR Scanner Modal Styles *** */
+.scanner-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  z-index: 2000;
+}
+
+.scanner-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.close-scanner-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 2002;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(5px);
+}
+
+.scanner-overlay-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2001;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.scanner-box {
+  width: 250px;
+  height: 250px;
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  border-radius: 24px;
+  box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
+}
+
+.scanner-overlay-content p {
+  color: white;
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 24px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+}
+
+.scanner-error-display {
+  position: absolute;
+  bottom: 80px;
+  left: 20px;
+  right: 20px;
+  background: #ef4444;
+  color: white;
+  padding: 16px;
+  border-radius: 12px;
+  text-align: center;
+  font-weight: 600;
+  z-index: 2003;
+  pointer-events: all;
+}
+
 
 /* Responsive */
 @media (max-width: 640px) {
@@ -880,7 +1063,6 @@ const claimReward = async () => {
   .form-container { padding: 28px 24px; }
   .check-button { font-size: 16px; padding: 14px 28px; }
   
-  /* *** FIX: Replaced .gift-icon with .gift-image *** */
   .gift-image {
     width: 100px;
     height: 60px;
