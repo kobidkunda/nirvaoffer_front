@@ -26,13 +26,16 @@ export const rewardAPI = {
       method: 'POST',
       body: { scanned_code: scannedCode }
     }),
-  
+
   // Claim reward (AUTH REQUIRED)
   claimReward: (codeToken) =>
     apiClient('/claim-reward', {
       method: 'POST',
       body: { code_token: codeToken }
-    })
+    }),
+
+  // Get gift slider data (PUBLIC)
+  getGiftSlider: () => apiClient('/json/gift-slider')
 }
 
 // Profile APIs

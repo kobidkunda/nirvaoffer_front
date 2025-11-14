@@ -4900,16 +4900,17 @@ index.html
 {code}
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nirva-loyalty-pwa</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/x-icon" href="/favicon.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Biolastic | Nirva Offer Redeem</title>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
 </html>
 {/code}
 
@@ -4933,14 +4934,17 @@ package.json
     "dayjs": "^1.11.19",
     "gsap": "^3.13.0",
     "localforage": "^1.10.0",
+    "motion-v": "^1.7.4",
     "naive-ui": "^2.43.1",
     "ofetch": "^1.5.1",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
+    "swiper": "^12.0.3",
     "vee-validate": "^4.15.1",
     "vue": "^3.5.24",
     "vue-confetti-explosion": "^1.0.2",
     "vue-i18n": "^9.14.5",
+    "vue-qrcode-reader": "^5.7.3",
     "vue-router": "^4.6.3",
     "zod": "^4.1.12"
   },
@@ -4969,22 +4973,49 @@ src/App.vue
 {code}
 <!-- src/App.vue -->
 <script setup>
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useLanguageStore } from '@/stores/language'
 import { RouterView } from 'vue-router'
+import LanguageModal from '@/components/common/LanguageModal.vue'
 
 const languageStore = useLanguageStore()
+const showLanguageModal = ref(false)
 
 onMounted(() => {
-  // Detect browser language on first load
-  if (!localStorage.getItem('user_language')) {
-    languageStore.detectBrowserLanguage()
+  // Check if user has selected language before
+  const hasSelectedLanguage = localStorage.getItem('language_selected')
+  
+  if (!hasSelectedLanguage) {
+    // First visit - show language selection modal
+    showLanguageModal.value = true
+  } else {
+    // Returning user - load saved language
+    const savedLanguage = localStorage.getItem('user_language')
+    if (savedLanguage) {
+      languageStore.setLanguage(savedLanguage)
+    } else {
+      // Fallback to browser language detection
+      languageStore.detectBrowserLanguage()
+    }
   }
 })
+
+const handleLanguageSelect = () => {
+  showLanguageModal.value = false
+}
 </script>
 
 <template>
   <div id="app">
+    <!-- First Visit Language Selection -->
+    <LanguageModal 
+      :show="showLanguageModal"
+      :is-first-visit="true"
+      @select="handleLanguageSelect"
+      @close="handleLanguageSelect"
+    />
+
+    <!-- Main App Content -->
     <RouterView />
   </div>
 </template>
@@ -4998,7 +5029,8 @@ onMounted(() => {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 
-    'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+    'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -5006,7 +5038,6 @@ body {
 #app {
   width: 100%;
   min-height: 100vh;
-  background: #f5f5f5;
 }
 </style>
 {/code}
@@ -5021,15 +5052,20 @@ import { ofetch } from 'ofetch'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 const API_VERSION = import.meta.env.VITE_API_VERSION
 
+console.log('API Config:', { API_BASE_URL, API_VERSION })
+
 // Create base API client
 export const apiClient = ofetch.create({
   baseURL: `${API_BASE_URL}/api/${API_VERSION}`,
   
   // Request interceptor
   onRequest({ options }) {
+    console.log('→ API Request:', options.method, options.baseURL + (options.url || ''))
+    
     // Add auth token if exists
     const token = localStorage.getItem('auth_token')
     if (token) {
+      console.log('→ Using auth token')
       options.headers = {
         ...options.headers,
         Authorization: `Bearer ${token}`
@@ -5046,18 +5082,23 @@ export const apiClient = ofetch.create({
   
   // Response interceptor
   onResponse({ response }) {
-    // You can transform response here
+    console.log('← API Response:', response.status, response._data)
     return response._data
   },
   
   // Error interceptor
   onResponseError({ response }) {
+    console.error('✗ API Error:', response.status, response._data)
+    
     const status = response.status
     
     // Handle 401 - Unauthorized
     if (status === 401) {
+      console.error('401 Unauthorized - clearing token')
       localStorage.removeItem('auth_token')
-      window.location.href = '/login'
+      if (window.location.pathname !== '/') {
+        window.location.href = '/'
+      }
     }
     
     // Handle 429 - Rate Limited
@@ -5066,12 +5107,13 @@ export const apiClient = ofetch.create({
       console.error(`Rate limited. Retry after ${retryAfter} seconds`)
     }
     
-    // Throw error to be caught by caller
-    throw new Error(response._data?.message || 'An error occurred')
+    // Throw error with message from API
+    const errorMessage = response._data?.message || response._data?.error || 'An error occurred'
+    throw new Error(errorMessage)
   },
   
-  // Retry configuration
-  retry: 1,
+  // Disable retry for debugging
+  retry: 0,
   retryDelay: 500
 })
 {/code}
@@ -5104,17 +5146,20 @@ export const authAPI = {
 export const rewardAPI = {
   // Validate scanned code (PUBLIC - no auth)
   validateCode: (scannedCode) =>
-    apiClient('/validate-code', {
+    apiClient('/validate-code-pub', {
       method: 'POST',
       body: { scanned_code: scannedCode }
     }),
-  
+
   // Claim reward (AUTH REQUIRED)
   claimReward: (codeToken) =>
     apiClient('/claim-reward', {
       method: 'POST',
       body: { code_token: codeToken }
-    })
+    }),
+
+  // Get gift slider data (PUBLIC)
+  getGiftSlider: () => apiClient('/json/gift-slider')
 }
 
 // Profile APIs
@@ -5813,7 +5858,10 @@ declare module 'vue' {
   export interface GlobalComponents {
     BaseButton: typeof import('./components/common/BaseButton.vue')['default']
     BaseInput: typeof import('./components/common/BaseInput.vue')['default']
+    GlobalHeader: typeof import('./components/common/GlobalHeader.vue')['default']
     HelloWorld: typeof import('./components/HelloWorld.vue')['default']
+    HelpModal: typeof import('./components/common/HelpModal.vue')['default']
+    LanguageModal: typeof import('./components/common/LanguageModal.vue')['default']
     OTPModal: typeof import('./components/common/OTPModal.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
@@ -5875,6 +5923,8 @@ const count = ref(0)
 
 src/components/common/BaseButton.vue
 {code}
+[Use BaseButton.vue code from above]
+<!-- src/components/common/BaseButton.vue -->
 <script setup>
 defineProps({
   variant: {
@@ -5982,6 +6032,8 @@ defineProps({
 
 src/components/common/BaseInput.vue
 {code}
+[Use BaseInput.vue code from above]
+<!-- src/components/common/BaseInput.vue -->
 <script setup>
 const props = defineProps({
   modelValue: [String, Number],
@@ -6066,27 +6118,810 @@ const updateValue = (event) => {
 
 ================================================================================
 
-src/components/common/OTPModal.vue
+src/components/common/GlobalHeader.vue
 {code}
+<!-- src/components/common/GlobalHeader.vue -->
 <script setup>
-import { ref, watch } from 'vue'
-import { useAuth } from '@/composables/useAuth'
+import { ref } from 'vue'
+import { motion } from 'motion-v'
 import { useLanguage } from '@/composables/useLanguage'
+import biolasticLogo from '@/assets/logo/logo_biolastic.png'
+import nirvaLogo from '@/assets/logo/nirva-logo-sq.png'
+
+const emit = defineEmits(['openHelp', 'openLanguage'])
+
+const { t } = useLanguage()
+</script>
+
+<template>
+  <div class="global-header">
+    <!-- Animated Background Icons -->
+    <div class="header-bg-animation">
+      <div class="float-icon icon-1">💰</div>
+      <div class="float-icon icon-2">🎁</div>
+      <div class="float-icon icon-3">⭐</div>
+      <div class="float-icon icon-4">💎</div>
+      <div class="float-icon icon-5">🎉</div>
+      <div class="float-icon icon-6">🏆</div>
+      <div class="float-icon icon-7">💵</div>
+      <div class="float-icon icon-8">✨</div>
+      <div class="float-icon icon-9">🎊</div>
+      <div class="float-icon icon-10">🪙</div>
+    </div>
+
+    <!-- Content -->
+    <div class="header-content">
+      <!-- Dual Logo Section -->
+      <div class="logos">
+        <motion.img 
+          :src="biolasticLogo" 
+          alt="Biolastic"
+          class="logo biolastic-logo"
+          :initial="{ opacity: 0, x: -20 }"
+          :animate="{ opacity: 1, x: 0 }"
+          :transition="{ duration: 0.6 }"
+        />
+        <span class="logo-divider">&</span>
+        <motion.img 
+          :src="nirvaLogo" 
+          alt="Nirva"
+          class="logo nirva-logo"
+          :initial="{ opacity: 0, x: 20 }"
+          :animate="{ opacity: 1, x: 0 }"
+          :transition="{ duration: 0.6 }"
+        />
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="actions">
+        <!-- Language Button -->
+        <motion.button
+          @click="emit('openLanguage')"
+          class="action-btn language-btn"
+          :whileHover="{ scale: 1.1, rotate: 5 }"
+          :whileTap="{ scale: 0.95 }"
+          aria-label="Change Language"
+        >
+          <span class="icon">🌐</span>
+          <span class="label">{{ t('common.language') }}</span>
+        </motion.button>
+
+        <!-- Help Button (Animated) -->
+        <motion.button
+          @click="emit('openHelp')"
+          class="action-btn help-btn"
+          :animate="{ 
+            scale: [1, 1.1, 1],
+            rotate: [0, -10, 10, 0]
+          }"
+          :transition="{ 
+            duration: 2,
+            repeat: Infinity,
+            repeatDelay: 3
+          }"
+          :whileHover="{ scale: 1.15 }"
+          :whileTap="{ scale: 0.95 }"
+          aria-label="Help"
+        >
+          <span class="icon">❓</span>
+          <span class="label">{{ t('common.help') }}</span>
+          <span class="ping"></span>
+        </motion.button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.global-header {
+  position: relative;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1),
+              0 2px 8px rgba(255, 215, 0, 0.2);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  overflow: hidden;
+  border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+}
+
+/* Animated Background */
+.header-bg-animation {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.float-icon {
+  position: absolute;
+  font-size: 20px;
+  opacity: 0.15;
+  animation: float-header 8s infinite ease-in-out;
+}
+
+.icon-1 {
+  top: -10px;
+  left: 5%;
+  animation-delay: 0s;
+}
+
+.icon-2 {
+  top: 10px;
+  left: 15%;
+  animation-delay: 0.5s;
+}
+
+.icon-3 {
+  top: -5px;
+  left: 25%;
+  animation-delay: 1s;
+}
+
+.icon-4 {
+  top: 15px;
+  left: 35%;
+  animation-delay: 1.5s;
+}
+
+.icon-5 {
+  top: 5px;
+  right: 35%;
+  animation-delay: 2s;
+}
+
+.icon-6 {
+  top: -8px;
+  right: 25%;
+  animation-delay: 2.5s;
+}
+
+.icon-7 {
+  top: 12px;
+  right: 15%;
+  animation-delay: 3s;
+}
+
+.icon-8 {
+  top: -3px;
+  right: 5%;
+  animation-delay: 3.5s;
+}
+
+.icon-9 {
+  top: 20px;
+  left: 45%;
+  animation-delay: 4s;
+}
+
+.icon-10 {
+  top: 8px;
+  right: 45%;
+  animation-delay: 4.5s;
+}
+
+@keyframes float-header {
+  0%, 100% {
+    transform: translateY(0) translateX(0) rotate(0deg);
+    opacity: 0.15;
+  }
+  25% {
+    transform: translateY(-8px) translateX(5px) rotate(90deg);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translateY(0) translateX(-5px) rotate(180deg);
+    opacity: 0.15;
+  }
+  75% {
+    transform: translateY(-5px) translateX(3px) rotate(270deg);
+    opacity: 0.2;
+  }
+}
+
+/* Content Layer */
+.header-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logos {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  height: 15px;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.1));
+}
+
+.biolastic-logo {
+  filter: brightness(1.1) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.1));
+}
+
+.nirva-logo {
+  border-radius: 8px;
+}
+
+.logo-divider {
+  font-size: 20px;
+  font-weight: 700;
+  color: #6b7280;
+  margin: 0 4px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+}
+
+.action-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.action-btn .icon {
+  font-size: 20px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.action-btn .label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+/* Help Button Special Effects */
+.help-btn {
+  border-color: #10b981;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+}
+
+.help-btn .icon {
+  background: linear-gradient(135deg, #10b981, #059669);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.help-btn .label {
+  color: #10b981;
+}
+
+.help-btn .ping {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 12px;
+  height: 12px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.help-btn .ping::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #10b981;
+  border-radius: 50%;
+  opacity: 0.75;
+  animation: ping-ripple 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes ping-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* Language Button Effects */
+.language-btn:hover {
+  border-color: #8b5cf6;
+  background: linear-gradient(135deg, #faf5ff 0%, #ffffff 100%);
+}
+
+.language-btn .label {
+  color: #8b5cf6;
+}
+
+/* Hover Effects */
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.action-btn:active {
+  transform: translateY(0);
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .global-header {
+    padding: 12px 16px;
+  }
+
+  .logo {
+    height: 15px;
+  }
+
+  .logo-divider {
+    font-size: 18px;
+  }
+
+  .action-btn {
+    padding: 6px 10px;
+  }
+
+  .action-btn .icon {
+    font-size: 18px;
+  }
+
+  .action-btn .label {
+    font-size: 10px;
+  }
+
+  .float-icon {
+    font-size: 16px;
+  }
+}
+</style>
+{/code}
+
+================================================================================
+
+src/components/common/HelpModal.vue
+{code}
+<!-- src/components/common/HelpModal.vue -->
+<script setup>
+import { motion, AnimatePresence } from 'motion-v'
+import { useLanguage } from '@/composables/useLanguage'
+import BaseButton from './BaseButton.vue'
 
 const props = defineProps({
   show: Boolean
 })
 
+const emit = defineEmits(['close'])
+
+const { t } = useLanguage()
+</script>
+
+<template>
+  <AnimatePresence>
+    <motion.div
+      v-if="show"
+      class="modal-overlay"
+      :initial="{ opacity: 0 }"
+      :animate="{ opacity: 1 }"
+      :exit="{ opacity: 0 }"
+      @click.self="emit('close')"
+    >
+      <motion.div
+        class="modal-content"
+        :initial="{ scale: 0.9, y: 20 }"
+        :animate="{ scale: 1, y: 0 }"
+        :exit="{ scale: 0.9, y: 20 }"
+        :transition="{ type: 'spring', damping: 20 }"
+      >
+        <button class="close-btn" @click="emit('close')">✕</button>
+        
+        <div class="help-header">
+          <h2>{{ t('help.title') }}</h2>
+        </div>
+
+        <div class="help-steps">
+          <!-- Step 1 -->
+          <motion.div
+            class="step"
+            :initial="{ opacity: 0, x: -20 }"
+            :animate="{ opacity: 1, x: 0 }"
+            :transition="{ delay: 0.1 }"
+          >
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <h3>{{ t('help.step1Title') }}</h3>
+              <p>{{ t('help.step1Description') }}</p>
+            </div>
+          </motion.div>
+
+          <!-- Step 2 -->
+          <motion.div
+            class="step"
+            :initial="{ opacity: 0, x: -20 }"
+            :animate="{ opacity: 1, x: 0 }"
+            :transition="{ delay: 0.2 }"
+          >
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <h3>{{ t('help.step2Title') }}</h3>
+              <p>{{ t('help.step2Description') }}</p>
+            </div>
+          </motion.div>
+
+          <!-- Step 3 -->
+          <motion.div
+            class="step"
+            :initial="{ opacity: 0, x: -20 }"
+            :animate="{ opacity: 1, x: 0 }"
+            :transition="{ delay: 0.3 }"
+          >
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <h3>{{ t('help.step3Title') }}</h3>
+              <p>{{ t('help.step3Description') }}</p>
+            </div>
+          </motion.div>
+        </div>
+
+        <BaseButton @click="emit('close')" variant="primary">
+          {{ t('help.gotIt') }}
+        </BaseButton>
+      </motion.div>
+    </motion.div>
+  </AnimatePresence>
+</template>
+
+<style scoped>
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 24px;
+  padding: 32px;
+  width: 100%;
+  max-width: 500px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: #f3f4f6;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.close-btn:hover {
+  background: #e5e7eb;
+  transform: rotate(90deg);
+}
+
+.help-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.help-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.help-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.step {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.step-number {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.step-content h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 8px 0;
+}
+
+.step-content p {
+  font-size: 15px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.5;
+}
+</style>
+{/code}
+
+================================================================================
+
+src/components/common/LanguageModal.vue
+{code}
+<!-- src/components/common/LanguageModal.vue -->
+<script setup>
+import { motion, AnimatePresence } from 'motion-v'
+import { useLanguageStore } from '@/stores/language'
+import { useLanguage } from '@/composables/useLanguage'
+
+const props = defineProps({
+  show: Boolean,
+  isFirstVisit: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const emit = defineEmits(['close', 'select'])
+
+const { changeLanguage, availableLanguages } = useLanguage()
+const { t } = useLanguage()
+
+const selectLanguage = (langCode) => {
+  changeLanguage(langCode)
+  localStorage.setItem('language_selected', 'true')
+  emit('select', langCode)
+  emit('close')
+}
+</script>
+
+<template>
+  <AnimatePresence>
+    <motion.div
+      v-if="show"
+      class="modal-overlay"
+      :initial="{ opacity: 0 }"
+      :animate="{ opacity: 1 }"
+      :exit="{ opacity: 0 }"
+      @click.self="!isFirstVisit && emit('close')"
+    >
+      <motion.div
+        class="modal-content"
+        :initial="{ scale: 0.8, opacity: 0 }"
+        :animate="{ scale: 1, opacity: 1 }"
+        :exit="{ scale: 0.8, opacity: 0 }"
+        :transition="{ type: 'spring', damping: 20 }"
+      >
+        <button v-if="!isFirstVisit" class="close-btn" @click="emit('close')">✕</button>
+        
+        <div class="header">
+          <motion.div
+            class="icon"
+            :animate="{ rotate: [0, -10, 10, -10, 10, 0] }"
+            :transition="{ duration: 1, repeat: Infinity, repeatDelay: 2 }"
+          >
+            🌐
+          </motion.div>
+          <h2>{{ t('languageSelect.title') }}</h2>
+          <p>{{ t('languageSelect.subtitle') }}</p>
+        </div>
+
+        <div class="language-grid">
+          <motion.button
+            v-for="(lang, index) in availableLanguages"
+            :key="lang.code"
+            @click="selectLanguage(lang.code)"
+            class="language-option"
+            :initial="{ opacity: 0, y: 20 }"
+            :animate="{ opacity: 1, y: 0 }"
+            :transition="{ delay: index * 0.1 }"
+            :whileHover="{ scale: 1.05, backgroundColor: '#f0fdf4' }"
+            :whileTap="{ scale: 0.95 }"
+          >
+            <span class="language-name">{{ lang.nativeName }}</span>
+            <span class="language-code">{{ lang.name }}</span>
+          </motion.button>
+        </div>
+      </motion.div>
+    </motion.div>
+  </AnimatePresence>
+</template>
+
+<style scoped>
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 24px;
+  padding: 40px 32px;
+  width: 100%;
+  max-width: 450px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: #f3f4f6;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.close-btn:hover {
+  background: #e5e7eb;
+  transform: rotate(90deg);
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  display: inline-block;
+}
+
+.header h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 8px 0;
+}
+
+.header p {
+  font-size: 15px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.language-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.language-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: inherit;
+}
+
+.language-option:hover {
+  border-color: #10b981;
+}
+
+.language-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.language-code {
+  font-size: 13px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+</style>
+{/code}
+
+================================================================================
+
+src/components/common/OTPModal.vue
+{code}
+<script setup>
+import { ref, watch, computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { useLanguage } from '@/composables/useLanguage'
+import BaseButton from './BaseButton.vue'
+import BaseInput from './BaseInput.vue'
+
+const props = defineProps({
+  show: Boolean,
+  error: String,    // Error from parent (e.g., "Invalid OTP")
+  loading: Boolean  // Loading state from parent (for verification)
+})
+
 const emit = defineEmits(['close', 'success'])
 
 const { t } = useLanguage()
-const { requestOTP } = useAuth()
+const authStore = useAuthStore()
 
 const step = ref('phone') // phone, otp
 const phoneNumber = ref('')
 const otpCode = ref('')
-const loading = ref(false)
-const error = ref('')
+const internalLoading = ref(false) // For 'Get OTP' request
+const internalError = ref('')   // For internal validation
+
+// Computed prop to show the correct error
+const displayError = computed(() => {
+  // Parent's error (e.g., "Invalid OTP") takes precedence
+  return props.error || internalError.value
+})
 
 watch(() => props.show, (newVal) => {
   if (newVal) {
@@ -6094,49 +6929,77 @@ watch(() => props.show, (newVal) => {
   }
 })
 
+// Watch for input changes to clear internal errors
+watch(phoneNumber, () => {
+  internalError.value = ''
+})
+watch(otpCode, () => {
+  internalError.value = ''
+})
+
+// If parent sends an error, clear any internal error
+watch(() => props.error, (newVal) => {
+  if (newVal) {
+    internalError.value = ''
+  }
+})
+
 const resetForm = () => {
   step.value = 'phone'
   phoneNumber.value = ''
   otpCode.value = ''
-  error.value = ''
+  internalError.value = '' // Use internalError
+  internalLoading.value = false
 }
 
 const handleRequestOTP = async () => {
-  error.value = ''
+  internalError.value = '' 
   
   // Validate phone number
   if (!/^[6-9]\d{9}$/.test(phoneNumber.value)) {
-    error.value = 'Please enter a valid 10-digit mobile number'
+    internalError.value = 'Please enter a valid 10-digit mobile number'
     return
   }
   
-  loading.value = true
-  const result = await requestOTP(phoneNumber.value)
-  loading.value = false
+  internalLoading.value = true
   
-  if (result.success) {
-    step.value = 'otp'
-  } else {
-    error.value = result.error || 'Failed to send OTP'
+  try {
+    const result = await authStore.requestOTP(phoneNumber.value)
+    
+    if (result.success) {
+      console.log('OTP sent successfully')
+      step.value = 'otp'
+    } else {
+      internalError.value = result.error || 'Failed to send OTP'
+    }
+  } catch (err) {
+    console.error('OTP request error:', err)
+    internalError.value = err.message || 'Failed to send OTP'
+  } finally {
+    internalLoading.value = false
   }
 }
 
 const handleVerifyOTP = async () => {
-  error.value = ''
+  internalError.value = ''
   
-  if (otpCode.value.length !== 6) {
-    error.value = 'Please enter the 6-digit OTP'
+  if (otpCode.value.length < 4) {
+    internalError.value = 'Please enter the OTP code'
     return
   }
   
-  loading.value = true
-  // Emit to parent to handle OTP verification with wallet update
-  emit('success', { phoneNumber: phoneNumber.value, otpCode: otpCode.value })
-  loading.value = false
+  console.log('Verifying OTP:', { phoneNumber: phoneNumber.value, otpCode: otpCode.value })
+  
+  // Emit to parent component to handle login
+  emit('success', { 
+    phoneNumber: phoneNumber.value, 
+    otpCode: otpCode.value 
+  })
 }
 
 const close = () => {
-  if (!loading.value) {
+  // Prevent closing if either internal or parent is loading
+  if (!internalLoading.value && !props.loading) {
     emit('close')
   }
 }
@@ -6146,12 +7009,12 @@ const close = () => {
   <Transition name="modal">
     <div v-if="show" class="modal-overlay" @click.self="close">
       <div class="modal-content">
-        <button class="close-btn" @click="close" :disabled="loading">✕</button>
+        <button class="close-btn" @click="close" :disabled="internalLoading || props.loading">✕</button>
         
-        <!-- Phone Number Step -->
         <div v-if="step === 'phone'" class="modal-body">
-          <div class="icon">📱</div>
+          <div class="icon whatsapp-icon">💬</div>
           <h2>{{ t('auth.enterPhone') }}</h2>
+          <p class="disclaimer">{{ t('auth.whatsappDisclaimer') }}</p>
           
           <BaseInput
             v-model="phoneNumber"
@@ -6160,19 +7023,18 @@ const close = () => {
             :label="t('auth.phoneLabel')"
             maxlength="10"
             pattern="[0-9]*"
-            :error="error"
+            :error="displayError" 
           />
           
           <BaseButton 
             @click="handleRequestOTP"
-            :loading="loading"
+            :loading="internalLoading"
             :disabled="phoneNumber.length !== 10"
           >
             {{ t('auth.getOTP') }}
           </BaseButton>
         </div>
         
-        <!-- OTP Verification Step -->
         <div v-if="step === 'otp'" class="modal-body">
           <div class="icon">🔐</div>
           <h2>{{ t('auth.enterOTP') }} {{ phoneNumber }}</h2>
@@ -6183,19 +7045,23 @@ const close = () => {
             :placeholder="t('auth.otpLabel')"
             maxlength="6"
             pattern="[0-9]*"
-            :error="error"
+            :error="displayError"
           />
           
           <BaseButton 
             @click="handleVerifyOTP"
-            :loading="loading"
-            :disabled="otpCode.length !== 6"
+            :loading="props.loading" 
+            :disabled="otpCode.length < 4 || internalLoading"
           >
             {{ t('auth.verify') }}
           </BaseButton>
           
-          <button class="link-button" @click="step = 'phone'">
-            Change Number
+          <button 
+            class="link-button" 
+            @click="step = 'phone'" 
+            :disabled="internalLoading || props.loading"
+          >
+            {{ t('auth.changeNumber') }}
           </button>
         </div>
       </div>
@@ -6247,6 +7113,11 @@ const close = () => {
   transform: rotate(90deg);
 }
 
+.close-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .modal-body {
   text-align: center;
 }
@@ -6256,27 +7127,48 @@ const close = () => {
   margin-bottom: 16px;
 }
 
+.icon.whatsapp-icon {
+  color: #25D366; /* WhatsApp Green */
+}
+
 h2 {
   font-size: 20px;
   font-weight: 600;
   color: #1f2937;
+  margin-bottom: 12px; /* Reduced margin */
+}
+
+.disclaimer {
+  font-size: 14px;
+  color: #6b7280;
   margin-bottom: 24px;
 }
 
+/* *** CSS FIX for Change Number Button *** */
 .link-button {
-  background: none;
-  border: none;
-  color: #10b981;
+  background: #f9fafb; /* Light gray background */
+  border: 1px solid #d1d5db; /* Gray border */
+  color: #374151; /* Dark gray text */
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   margin-top: 16px;
-  padding: 8px;
+  padding: 10px 16px;
+  width: 100%;
+  border-radius: 8px;
+  transition: background-color 0.2s;
 }
 
 .link-button:hover {
-  text-decoration: underline;
+  background-color: #f3f4f6; /* Slightly darker on hover */
+  text-decoration: none;
 }
+
+.link-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* *** End of CSS FIX *** */
 
 /* Transition */
 .modal-enter-active,
@@ -6306,8 +7198,14 @@ h2 {
 src/components/reward/ScratchCard.vue
 {code}
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
 import { gsap } from 'gsap'
+import { motion } from 'motion-v'
+// *** NEW: Import translations ***
+import { useLanguage } from '@/composables/useLanguage'
+
+// *** NEW: Initialize translations ***
+const { t } = useLanguage()
 
 const props = defineProps({
   cashbackAmount: {
@@ -6327,9 +7225,10 @@ const containerRef = ref(null)
 const isScratching = ref(false)
 const scratchProgress = ref(0)
 const isRevealed = ref(false)
+const showConfetti = ref(false)
 
 let context = null
-let scratchThreshold = 50 // 50% scratched to auto-reveal
+const scratchThreshold = 50 // 50% scratched to auto-reveal
 
 onMounted(() => {
   nextTick(() => {
@@ -6353,35 +7252,37 @@ const initCanvas = () => {
   
   context = canvas.getContext('2d')
   
-  // Set canvas size
-  canvas.width = canvas.offsetWidth * 2 // Retina display
+  // Set canvas size for retina displays
+  canvas.width = canvas.offsetWidth * 2
   canvas.height = canvas.offsetHeight * 2
   context.scale(2, 2)
   
-  // Draw scratch cover (gradient)
+  // Draw scratch cover (luxurious gradient)
   const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height)
-  gradient.addColorStop(0, '#d1d5db')
-  gradient.addColorStop(1, '#9ca3af')
+  gradient.addColorStop(0, '#d4af37') // Gold
+  gradient.addColorStop(1, '#b8860b') // Darker gold
   
   context.fillStyle = gradient
   context.fillRect(0, 0, canvas.width, canvas.height)
   
-  // Add "Scratch Here" text
-  context.fillStyle = '#ffffff'
-  context.font = 'bold 24px sans-serif'
+  // Add sparkling "Scratch Here" text with shadow
+  context.fillStyle = '#fffacd'
+  context.font = 'bold 28px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif'
   context.textAlign = 'center'
   context.textBaseline = 'middle'
-  context.fillText('🎁 Scratch Here 🎁', canvas.width / 4, canvas.height / 4)
+  context.shadowColor = 'rgba(255, 255, 255, 0.9)'
+  context.shadowBlur = 10
   
+  // *** FIX: Use translation for canvas text ***
+  context.fillText(t('scratch.scratchHere'), canvas.width / 4, canvas.height * 0.25)
+
   // Register events
   canvas.addEventListener('mousedown', startScratch)
   canvas.addEventListener('mousemove', scratch)
   canvas.addEventListener('mouseup', stopScratch)
   canvas.addEventListener('mouseleave', stopScratch)
-  
-  // Touch events for mobile
-  canvas.addEventListener('touchstart', startScratch)
-  canvas.addEventListener('touchmove', scratch)
+  canvas.addEventListener('touchstart', startScratch, { passive: false })
+  canvas.addEventListener('touchmove', scratch, { passive: false })
   canvas.addEventListener('touchend', stopScratch)
 }
 
@@ -6401,7 +7302,6 @@ const scratch = (e) => {
   const canvas = canvasRef.value
   const rect = canvas.getBoundingClientRect()
   
-  // Get position (works for both mouse and touch)
   let x, y
   if (e.type.includes('touch')) {
     x = e.touches[0].clientX - rect.left
@@ -6411,13 +7311,11 @@ const scratch = (e) => {
     y = e.clientY - rect.top
   }
   
-  // "Erase" by setting composite operation
   context.globalCompositeOperation = 'destination-out'
   context.beginPath()
-  context.arc(x, y, 25, 0, Math.PI * 2)
+  context.arc(x, y, 30, 0, Math.PI * 2)
   context.fill()
   
-  // Check scratch progress
   calculateProgress()
 }
 
@@ -6427,14 +7325,12 @@ const calculateProgress = () => {
   const pixels = imageData.data
   let transparent = 0
   
-  // Count transparent pixels
   for (let i = 3; i < pixels.length; i += 4) {
     if (pixels[i] < 128) transparent++
   }
   
   scratchProgress.value = Math.round((transparent / (pixels.length / 4)) * 100)
   
-  // Auto-reveal if threshold reached
   if (scratchProgress.value >= scratchThreshold && !isRevealed.value) {
     revealReward()
   }
@@ -6442,8 +7338,8 @@ const calculateProgress = () => {
 
 const revealReward = () => {
   isRevealed.value = true
+  showConfetti.value = true
   
-  // Animate canvas fade out
   gsap.to(canvasRef.value, {
     opacity: 0,
     duration: 0.4,
@@ -6455,7 +7351,6 @@ const revealReward = () => {
 }
 
 const animateReward = () => {
-  // Animate reward text
   gsap.from('.reward-content', {
     scale: 0,
     opacity: 0,
@@ -6472,16 +7367,65 @@ const handleClaim = () => {
 <template>
   <div ref="containerRef" class="scratch-card">
     <div class="card-inner">
-      <!-- Revealed Content (Behind Canvas) -->
+      <motion.div 
+        v-if="showConfetti"
+        class="confetti-container"
+        :initial="{ opacity: 0 }"
+        :animate="{ opacity: 1 }"
+        :exit="{ opacity: 0 }"
+      >
+        <motion.div
+          v-for="n in 30"
+          :key="`confetti-${n}`"
+          class="confetti-icon"
+          :animate="{
+            y: [0, -250],
+            x: [0, (n % 2 === 0 ? -100 : 100)],
+            rotate: [0, 720]
+          }"
+          :transition="{
+            duration: 4 + n * 0.1,
+            repeat: Infinity,
+            ease: 'linear',
+            delay: n * 0.1
+          }"
+          :style="{ fontSize: `${14 + (n % 5) * 6}px`, opacity: 0.8 }"
+        >
+          🎉
+        </motion.div>
+        <motion.div
+          v-for="n in 20"
+          :key="`coin-${n}`"
+          class="confetti-icon"
+          :animate="{
+            y: [0, -200],
+            x: [0, (n % 2 === 0 ? 80 : -80)],
+            rotate: [0, -720]
+          }"
+          :transition="{
+            duration: 5 + n * 0.15,
+            repeat: Infinity,
+            ease: 'linear',
+            delay: n * 0.08
+          }"
+          :style="{ fontSize: `${12 + (n % 4) * 5}px`, opacity: 0.7 }"
+        >
+          🪙
+        </motion.div>
+      </motion.div>
+
       <div class="reward-content">
-        <div class="reward-icon">🎉</div>
-        <h2 class="reward-title">Congratulations!</h2>
+        <div class="reward-icon">🎊</div>
+        <h2 class="reward-title">{{ t('scratch.title') }}</h2>
         <div class="reward-amount">
           <span class="currency">₹</span>{{ cashbackAmount }}
-          <span class="label">Cashback</span>
+          <span class="label">{{ t('scratch.cashback') }}</span>
         </div>
         <div class="reward-tickets">
-          + {{ tickets }} Lucky Draw Ticket{{ tickets > 1 ? 's' : '' }}
+          <div class="ticket-count">
+            {{ tickets === 1 ? t('scratch.ticketSingle') : t('scratch.ticketPlural', { count: tickets }) }}
+          </div>
+          <div class="prize-info">{{ t('scratch.prizeInfo') }}</div>
         </div>
         <BaseButton 
           v-if="isRevealed"
@@ -6490,15 +7434,14 @@ const handleClaim = () => {
           size="large"
           class="claim-button"
         >
-          Claim Your Reward!
+          {{ t('scratch.claim') }}
         </BaseButton>
       </div>
       
-      <!-- Scratch Canvas (On Top) -->
       <canvas 
         ref="canvasRef" 
         class="scratch-canvas"
-        :style="{ pointerEvents: isRevealed ? 'none' : 'auto' }"
+        :style="{ pointerEvents: isRevealed ? 'none' : 'auto', opacity: isRevealed ? 0 : 1 }"
       />
     </div>
     
@@ -6513,6 +7456,9 @@ const handleClaim = () => {
   width: 100%;
   max-width: 400px;
   margin: 0 auto;
+  position: relative;
+  z-index: 10;
+  user-select: none;
 }
 
 .card-inner {
@@ -6520,53 +7466,84 @@ const handleClaim = () => {
   background: linear-gradient(135deg, #fef3c7 0%, #fcd34d 100%);
   border-radius: 20px;
   padding: 40px 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    0 0 30px 3px #fedb58,
+    inset 0 0 40px 10px #f9d71c,
+    0 10px 30px rgba(0, 0, 0, 0.2);
   overflow: hidden;
 }
 
 .reward-content {
   text-align: center;
   position: relative;
-  z-index: 1;
+  z-index: 2;
+  color: #6b4b00;
+  text-shadow:
+    0 0 8px #ffd700,
+    0 0 12px #fbbf24;
 }
 
 .reward-icon {
-  font-size: 60px;
-  margin-bottom: 16px;
+  font-size: 72px;
+  margin-bottom: 18px;
+  animation: pulse 2s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
 }
 
 .reward-title {
-  font-size: 28px;
-  font-weight: 700;
-  color: #78350f;
-  margin-bottom: 20px;
+  font-size: 32px;
+  font-weight: 900;
+  margin-bottom: 18px;
+  color: #b27700;
+  text-shadow: 0 0 10px #ffd700;
 }
 
 .reward-amount {
-  font-size: 48px;
-  font-weight: 800;
-  color: #92400e;
+  font-size: 56px;
+  font-weight: 900;
+  color: #d97706;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 12px;
+  text-shadow:
+    0 0 12px #fbbf24,
+    0 0 18px #fedb58;
 }
 
 .currency {
-  font-size: 32px;
+  font-size: 36px;
 }
 
 .label {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
+  color: #b45309;
 }
 
 .reward-tickets {
-  font-size: 18px;
-  font-weight: 600;
-  color: #78350f;
-  margin-bottom: 24px;
+  color: #7c4a00;
+  margin-bottom: 28px;
+  text-shadow: 0 0 7px #fff3bf;
+}
+
+/* *** NEW: Class for ticket count *** */
+.ticket-count {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* *** NEW: Class for prize info *** */
+.prize-info {
+  font-size: 16px;
+  font-weight: 500;
+  margin-top: 4px;
+  color: #b27700;
 }
 
 .scratch-canvas {
@@ -6577,29 +7554,66 @@ const handleClaim = () => {
   height: 100%;
   cursor: pointer;
   touch-action: none;
-  z-index: 10;
+  z-index: 5;
+  border-radius: 20px;
 }
 
 .claim-button {
   margin-top: 20px;
-  max-width: 300px;
+  max-width: 320px;
   margin-left: auto;
   margin-right: auto;
+  box-shadow:
+    0 0 15px #fcd34d,
+    inset 0 0 20px #fedc56;
+  transition: box-shadow 0.4s ease;
+}
+
+.claim-button:hover {
+  box-shadow:
+    0 0 25px #fde68a,
+    inset 0 0 28px #ffec99;
 }
 
 .progress-bar {
   width: 100%;
-  height: 4px;
-  background: #e5e7eb;
-  border-radius: 2px;
-  margin-top: 16px;
+  height: 6px;
+  background: #facc15;
+  border-radius: 3px;
+  margin-top: 20px;
   overflow: hidden;
+  box-shadow: 0 0 12px #fcd34d inset;
 }
 
 .progress-fill {
   height: 100%;
-  background: #10b981;
+  background: #ca8a04;
   transition: width 0.3s ease;
+  box-shadow: 0 0 15px #ca8a04;
+}
+
+/* Confetti Container Fullscreen */
+.confetti-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9;
+  overflow: visible;
+  background: radial-gradient(circle at center, rgba(255, 240, 200, 0.15), transparent 80%);
+}
+
+/* Confetti icons floating upward */
+.confetti-icon {
+  position: absolute;
+  bottom: -40px;
+  user-select: none;
+  filter: drop-shadow(0 0 3px gold);
+  text-shadow:
+    0 0 6px #fef3c7,
+    0 0 12px #fca311;
 }
 </style>
 {/code}
@@ -6673,16 +7687,192 @@ export function useLanguage() {
 
 ================================================================================
 
+src/data/gifts.json
+{code}
+{
+  "gifts": [
+    {
+      "id": 1,
+      "name": "Pressure Cooker",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "1st Prize",
+      "icon": "🍲"
+    },
+    {
+      "id": 2,
+      "name": "Mixer Grinder",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "2nd Prize",
+      "icon": "🥤"
+    },
+    {
+      "id": 3,
+      "name": "Electric Kettle",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "3rd Prize",
+      "icon": "☕"
+    },
+    {
+      "id": 4,
+      "name": "Rice Cooker",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "4th Prize",
+      "icon": "🍚"
+    },
+    {
+      "id": 5,
+      "name": "Air Fryer",
+      "image": "/src/assets/gifts/air-fryer.jpg",
+      "points": "5th Prize",
+      "icon": "🍟"
+    },
+    {
+      "id": 6,
+      "name": "Water Purifier",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "6th Prize",
+      "icon": "💧"
+    },
+    {
+      "id": 7,
+      "name": "Toaster",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "7th Prize",
+      "icon": "🍞"
+    },
+    {
+      "id": 8,
+      "name": "Iron Box",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "8th Prize",
+      "icon": "👔"
+    },
+    {
+      "id": 9,
+      "name": "Vacuum Cleaner",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "9th Prize",
+      "icon": "🧹"
+    },
+    {
+      "id": 10,
+      "name": "Microwave Oven",
+      "image": "/src/assets/gifts/pc.jpg",
+      "points": "10th Prize",
+      "icon": "🔥"
+    }
+  ]
+}
+{/code}
+
+================================================================================
+
 src/locales/bn.json
 {code}
 {
   "common": {
-    "appName": "নির্ভা লয়্যালটি",
-    "loading": "লোড হচ্ছে..."
+    "appName": "লয়্যালটি প্রোগ্রাম",
+    "loading": "লোড হচ্ছে...",
+    "submit": "জমা দিন",
+    "cancel": "বাতিল করুন",
+    "save": "সংরক্ষণ করুন",
+    "close": "বন্ধ করুন",
+    "confirm": "নিশ্চিত করুন",
+    "error": "ত্রুটি",
+    "success": "সফলতা",
+    "help": "সাহায্য",
+    "language": "ভাষা"
+  },
+  "languageSelect": {
+    "title": "আপনার ভাষা চয়ন করুন",
+    "subtitle": "আপনার পছন্দের ভাষা নির্বাচন করুন",
+    "continue": "চালিয়ে যান"
+  },
+  "help": {
+    "title": "এটি কীভাবে কাজ করে",
+    "step1Title": "আমাদের পণ্য কিনুন",
+    "step1Description": "যেকোনো বায়োলাস্টিক বা নির্ভা পণ্য কিনুন",
+    "step2Title": "আপনার কোড খুঁজুন",
+    "step2Description": "প্যাকেটের ভিতরে বা বোতলে 12-সংখ্যার কোডটি দেখুন",
+    "step3Title": "এন্টার করুন এবং জিতুন",
+    "step3Description": "তাৎক্ষণিক ক্যাশব্যাক জিততে এবং বাম্পার পুরস্কার জেতার সুযোগ পেতে আপনার কোড লিখুন!",
+    "gotIt": "বুঝেছি!"
+  },
+  "scan": {
+    "title": "ক্যাশব্যাক জিততে আপনার কোড লিখুন!",
+    "placeholder": "12-সংখ্যার কোড লিখুন",
+    "submit": "কোড চেক করুন",
+    "invalid": "অবৈধ কোড। অনুগ্রহ করে আবার চেষ্টা করুন।",
+    "used": "এই কোডটি ইতিমধ্যে ব্যবহার করা হয়েছে।",
+    "expired": "এই কোডটি মেয়াদ শেষ হয়েছে।",
+    "loginPrompt": "ইতিমধ্যে অ্যাকাউন্ট আছে?",
+    "loginButton": "লগইন করুন",
+    "scanButton": "QR কোড স্ক্যান করুন",
+    "orEnterCode": "অথবা নীচে কোড লিখুন",
+    "scannerPrompt": "ক্যামেরাটি QR কোডের দিকে ধরুন"
+  },
+  "scratch": {
+    "title": "অভিনন্দন!",
+    "subtitle": "আপনার পুরস্কার দেখতে স্ক্র্যাচ করুন!",
+    "won": "আপনি জিতেছেন",
+    "cashback": "ক্যাশব্যাক",
+    "tickets": "লাকি ড্র টিকিট",
+    "claim": "আপনার পুরস্কার দাবি করুন!",
+    "scratchHere": "🎁 এখানে স্ক্র্যাচ করুন 🎁",
+    "ticketSingle": "+ ১টি লাকি ড্র টিকিট",
+    "ticketPlural": "+ {count}টি লাকি ড্র টিকিট",
+    "prizeInfo": "মাইক্রোওভেন, ইন্ডাকশন কুকটপ এবং আরও অনেক কিছু জিততে!"
+  },
+  "auth": {
+    "enterPhone": "আপনার হোয়াটসঅ্যাপ নম্বর লিখুন",
+    "phoneLabel": "হোয়াটসঅ্যাপ নম্বর",
+    "phonePlaceholder": "10-সংখ্যার হোয়াটসঅ্যাপ নম্বর",
+    "whatsappDisclaimer": "আপনি এই হোয়াটসঅ্যাপ নম্বরে একটি OTP পাবেন।",
+    "getOTP": "OTP পান",
+    "enterOTP": "আপনার হোয়াটসঅ্যাপে পাঠানো 4-সংখ্যার OTP লিখুন",
+    "otpLabel": "OTP কোড",
+    "verify": "যাচাই করুন এবং লগইন করুন",
+    "resendOTP": "OTP পুনরায় পাঠান",
+    "changeNumber": "নম্বর পরিবর্তন করুন",
+    "enterName": "আপনার নাম কী?",
+    "nameLabel": "আপনার নাম",
+    "namePlaceholder": "আপনার নাম লিখুন"
   },
   "dashboard": {
     "welcome": "স্বাগতম",
-    "wallet": "আপনার ওয়ালেট"
+    "wallet": "আপনার ওয়ালেট",
+    "tickets": "আপনার লাকি ড্র টিকিট",
+    "redeemGifts": "উপহার রিডিম করুন",
+    "seePrizes": "মাসিক পুরস্কার দেখুন",
+    "scanAnother": "আরেকটি কোড স্ক্যান করুন"
+  },
+  "redeem": {
+    "title": "পুরস্কার রিডিম করুন",
+    "yourBalance": "আপনার ব্যালেন্স",
+    "insufficientBalance": "অপর্যাপ্ত ব্যালেন্স",
+    "selectProduct": "পণ্য নির্বাচন করুন",
+    "confirmRedemption": "রিডেম্পশন নিশ্চিত করুন",
+    "redeemFor": "এর জন্য রিডিম করুন",
+    "address": "ডেলিভারি ঠিকানা",
+    "placeOrder": "অর্ডার করুন",
+    "orderSuccess": "অর্ডার সফলভাবে দেওয়া হয়েছে!",
+    "newBalance": "আপনার নতুন ব্যালেন্স"
+  },
+  "profile": {
+    "title": "আমার প্রোফাইল",
+    "phone": "ফোন নম্বর",
+    "name": "নাম",
+    "address": "শিপিং ঠিকানা",
+    "language": "ভাষা",
+    "logout": "লগআউট"
+  },
+  "errors": {
+    "network": "নেটওয়ার্ক ত্রুটি। অনুগ্রহ করে আপনার সংযোগ পরীক্ষা করুন।",
+    "rateLimited": "অনেক প্রচেষ্টা। অনুগ্রহ করে পরে আবার চেষ্টা করুন।",
+    "unknown": "কিছু ভুল হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।",
+    "cameraPermission": "ক্যামেরার অনুমতি দেওয়া হয়নি। অনুগ্রহ করে আপনার ব্রাউজার সেটিংসে ক্যামেরার অনুমতি দিন।",
+    "cameraNotFound": "এই ডিভাইসে কোনো ক্যামেরা খুঁজে পাওয়া যায়নি।",
+    "cameraError": "ক্যামেরা শুরু করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।"
   }
 }
 {/code}
@@ -6693,12 +7883,108 @@ src/locales/en.json
 {code}
 {
   "common": {
-    "appName": "Nirva Loyalty",
-    "loading": "Loading..."
+    "appName": "Loyalty Program",
+    "loading": "Loading...",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close",
+    "confirm": "Confirm",
+    "error": "Error",
+    "success": "Success",
+    "help": "Help",
+    "language": "Language"
+  },
+  "languageSelect": {
+    "title": "Choose Your Language",
+    "subtitle": "Select your preferred language",
+    "continue": "Continue"
+  },
+  "help": {
+    "title": "How It Works",
+    "step1Title": "Buy Our Products",
+    "step1Description": "Purchase any Biolastic or Nirva product",
+    "step2Title": "Find Your Code",
+    "step2Description": "Look for the 12-digit code inside the packet or on bottles",
+    "step3Title": "Enter & Win",
+    "step3Description": "Enter your code to win instant cashback and a chance at bumper prizes!",
+    "gotIt": "Got it!"
+  },
+  "scan": {
+    "title": "Enter Your Code to Win Cashback!",
+    "placeholder": "Enter 12-digit code",
+    "submit": "Check Code",
+    "invalid": "Invalid code. Please try again.",
+    "used": "This code has already been used.",
+    "expired": "This code has expired.",
+    "loginPrompt": "Already have an account?",
+    "loginButton": "Login",
+    "scanButton": "Scan QR Code",
+    "orEnterCode": "Or Enter Code Below",
+    "scannerPrompt": "Point your camera at the QR code"
+  },
+  "scratch": {
+    "title": "Congratulations!",
+    "subtitle": "Scratch to see your reward!",
+    "won": "You won",
+    "cashback": "Cashback",
+    "tickets": "Lucky Draw Tickets",
+    "claim": "Claim Your Reward!",
+    "scratchHere": "🎁 Scratch Here 🎁",
+    "ticketSingle": "+ 1 Lucky Draw Ticket",
+    "ticketPlural": "+ {count} Lucky Draw Tickets",
+    "prizeInfo": "To Win Microoven, Inducqtion Cooktop & More!"
+  },
+  "auth": {
+    "enterPhone": "Enter your WhatsApp Number",
+    "phoneLabel": "WhatsApp Number",
+    "phonePlaceholder": "10-digit WhatsApp Number",
+    "whatsappDisclaimer": "You will receive an OTP on this WhatsApp number.",
+    "getOTP": "Get OTP",
+    "enterOTP": "Enter the 4-digit OTP sent to your WhatsApp",
+    "otpLabel": "OTP Code",
+    "verify": "Verify & Login",
+    "resendOTP": "Resend OTP",
+    "changeNumber": "Change Number",
+    "enterName": "What's your name?",
+    "nameLabel": "Your Name",
+    "namePlaceholder": "Enter your name"
   },
   "dashboard": {
     "welcome": "Welcome",
-    "wallet": "Your Wallet"
+    "wallet": "Your Wallet",
+    "tickets": "Your Lucky Draw Tickets",
+    "redeemGifts": "Redeem Gifts",
+    "seePrizes": "See Monthly Prizes",
+    "scanAnother": "Scan Another Code"
+  },
+  "redeem": {
+    "title": "Redeem Rewards",
+    "yourBalance": "Your Balance",
+    "insufficientBalance": "Insufficient balance",
+    "selectProduct": "Select Product",
+    "confirmRedemption": "Confirm Redemption",
+    "redeemFor": "Redeem for",
+    "address": "Delivery Address",
+    "placeOrder": "Place Order",
+    "orderSuccess": "Order placed successfully!",
+    "newBalance": "Your new balance"
+  },
+  "profile": {
+    "title": "My Profile",
+    "phone": "Phone Number",
+    "name": "Name",
+    "address": "Shipping Address",
+    "language": "Language",
+    "logout": "Logout"
+  },
+  "errors": {
+    "network": "Network error. Please check your connection.",
+    "rateLimited": "Too many attempts. Please try again later.",
+    "unknown": "Something went wrong. Please try again.",
+    "cameraPermission": "Camera permission denied. Please allow camera access in your browser settings.",
+    "cameraNotFound": "No camera found on this device.",
+    "cameraError": "Could not initialize camera. Please try again."
   }
 }
 {/code}
@@ -6709,12 +7995,108 @@ src/locales/hi.json
 {code}
 {
   "common": {
-    "appName": "निर्वा लॉयल्टी",
-    "loading": "लोड हो रहा है..."
+    "appName": "लॉयल्टी प्रोग्राम",
+    "loading": "लोड हो रहा है...",
+    "submit": "जमा करें",
+    "cancel": "रद्द करें",
+    "save": "सहेजें",
+    "close": "बंद करें",
+    "confirm": "पुष्टि करें",
+    "error": "त्रुटि",
+    "success": "सफलता",
+    "help": "सहायता",
+    "language": "भाषा"
+  },
+  "languageSelect": {
+    "title": "अपनी भाषा चुनें",
+    "subtitle": "अपनी पसंदीदा भाषा चुनें",
+    "continue": "जारी रखें"
+  },
+  "help": {
+    "title": "यह कैसे काम करता है",
+    "step1Title": "हमारे उत्पाद खरीदें",
+    "step1Description": "कोई भी बायोलास्टिक या निर्वा उत्पाद खरीदें",
+    "step2Title": "अपना कोड खोजें",
+    "step2Description": "पैकेट के अंदर या बोतलों पर 12-अंकों का कोड देखें",
+    "step3Title": "दर्ज करें और जीतें",
+    "step3Description": "तुरंत कैशबैक जीतने और बंपर पुरस्कार जीतने का मौका पाने के लिए अपना कोड दर्ज करें!",
+    "gotIt": "समझ गया!"
+  },
+  "scan": {
+    "title": "कैशबैक जीतने के लिए अपना कोड दर्ज करें!",
+    "placeholder": "12-अंकों का कोड दर्ज करें",
+    "submit": "कोड जांचें",
+    "invalid": "अमान्य कोड। कृपया पुनः प्रयास करें।",
+    "used": "यह कोड पहले ही उपयोग किया जा चुका है।",
+    "expired": "यह कोड समाप्त हो गया है।",
+    "loginPrompt": "पहले से खाता है?",
+    "loginButton": "लॉगिन करें",
+    "scanButton": "QR कोड स्कैन करें",
+    "orEnterCode": "या नीचे कोड दर्ज करें",
+    "scannerPrompt": "अपने कैमरे को QR कोड पर केंद्रित करें"
+  },
+  "scratch": {
+    "title": "बधाई हो!",
+    "subtitle": "अपना इनाम देखने के लिए स्क्रैच करें!",
+    "won": "आपने जीता",
+    "cashback": "कैशबैक",
+    "tickets": "लकी ड्रॉ टिकट",
+    "claim": "अपना इनाम क्लेम करें!",
+    "scratchHere": "🎁 यहाँ स्क्रैच करें 🎁",
+    "ticketSingle": "+ १ लकी ड्रॉ टिकट",
+    "ticketPlural": "+ {count} लकी ड्रॉ टिकट",
+    "prizeInfo": "माइक्रोवेव, इंडक्शन कुकटॉप और बहुत कुछ जीतने के लिए!"
+  },
+  "auth": {
+    "enterPhone": "अपना व्हाट्सएप नंबर दर्ज करें",
+    "phoneLabel": "व्हाट्सएप नंबर",
+    "phonePlaceholder": "10-अंकों का व्हाट्सएप नंबर",
+    "whatsappDisclaimer": "आपको इस व्हाट्सएप नंबर पर एक OTP प्राप्त होगा।",
+    "getOTP": "OTP प्राप्त करें",
+    "enterOTP": "आपके व्हाट्सएप पर भेजे गए 4-अंकों का OTP दर्ज करें",
+    "otpLabel": "OTP कोड",
+    "verify": "सत्यापित करें और लॉगिन करें",
+    "resendOTP": "OTP फिर से भेजें",
+    "changeNumber": "नंबर बदलें",
+    "enterName": "आपका नाम क्या है?",
+    "nameLabel": "आपका नाम",
+    "namePlaceholder": "अपना नाम दर्ज करें"
   },
   "dashboard": {
     "welcome": "स्वागत है",
-    "wallet": "आपका वॉलेट"
+    "wallet": "आपका वॉलेट",
+    "tickets": "आपके लकी ड्रॉ टिकट",
+    "redeemGifts": "उपहार रिडीম करें",
+    "seePrizes": "मासिक पुरस्कार देखें",
+    "scanAnother": "एक और कोड स्कैन करें"
+  },
+  "redeem": {
+    "title": "रिवॉर्ड रिडीम करें",
+    "yourBalance": "आपका बैलेंस",
+    "insufficientBalance": "अपर्याপ্ত बैलेंस",
+    "selectProduct": "उत्पाद चुनें",
+    "confirmRedemption": "रिडेम्पशन की पुष्टि करें",
+    "redeemFor": "इसके लिए रिडीम करें",
+    "address": "डिलीवरी पता",
+    "placeOrder": "ऑर्डर करें",
+    "orderSuccess": "ऑर्डर सफलतापूर्वक दिया गया!",
+    "newBalance": "आपका नया बैलेंस"
+  },
+  "profile": {
+    "title": "मेरी प्रोफाइल",
+    "phone": "फोन नंबर",
+    "name": "नाम",
+    "address": "शिपिंग पता",
+    "language": "भाषा",
+    "logout": "लॉगआउट"
+  },
+  "errors": {
+    "network": "नेटवर्क त्रुटि। कृपया अपना कनेक्शन जांचें।",
+    "rateLimited": "बहुत सारे प्रयास। कृपया बाद में पुनः प्रयास करें।",
+    "unknown": "कुछ गलत हो गया। कृपया पुनः प्रयास करें।",
+    "cameraPermission": "कैमरे की अनुमति अस्वीकार कर दी गई। कृपया अपनी ब्राउज़र सेटिंग में कैमरे की अनुमति दें।",
+    "cameraNotFound": "इस डिवाइस पर कोई कैमरा नहीं मिला।",
+    "cameraError": "कैमरा शुरू नहीं किया जा सका। कृपया पुनः प्रयास करें।"
   }
 }
 {/code}
@@ -6736,18 +8118,24 @@ import en from './locales/en.json'
 import hi from './locales/hi.json'
 import bn from './locales/bn.json'
 
+console.log('Starting app initialization...')
+
 // Create i18n instance
 const i18n = createI18n({
-  legacy: false, // Use Composition API mode
+  legacy: false,
   locale: localStorage.getItem('user_language') || 'en',
   fallbackLocale: 'en',
   messages: { en, hi, bn },
   globalInjection: true
 })
 
+console.log('i18n initialized')
+
 // Create Pinia instance with persistence
 const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)
+
+console.log('Pinia initialized')
 
 // Create app
 const app = createApp(App)
@@ -6756,7 +8144,17 @@ app.use(pinia)
 app.use(router)
 app.use(i18n)
 
+// Add global error handler
+app.config.errorHandler = (err, instance, info) => {
+  console.error('Global error:', err)
+  console.error('Error info:', info)
+  console.error('Component:', instance)
+}
+
+// Mount app
 app.mount('#app')
+
+console.log('Vue app mounted successfully!')
 {/code}
 
 ================================================================================
@@ -6768,17 +8166,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const routes = [
-
-    {
-  path: '/test',
-  component: () => import('@/views/Test.vue')
-}, 
   {
     path: '/',
     name: 'scan',
     component: () => import('@/views/ScanPage.vue'),
     meta: { requiresAuth: false }
-  },/*
+  },
   {
     path: '/dashboard',
     name: 'dashboard',
@@ -6802,7 +8195,7 @@ const routes = [
     name: 'language-select',
     component: () => import('@/views/LanguageSelect.vue'),
     meta: { requiresAuth: false }
-  }, */
+  },
   {
     path: '/:pathMatch(.*)*',
     redirect: '/'
@@ -6819,18 +8212,21 @@ router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
   const requiresAuth = to.meta.requiresAuth
 
+  console.log('Router guard:', { to: to.name, requiresAuth, isLoggedIn: authStore.isLoggedIn })
+
   // If user is already logged in and tries to access scan page, redirect to dashboard
-  if (to.name === 'scan' && authStore.isLoggedIn) {
+  if (to.name === 'scan' && authStore.isLoggedIn && !from.name) {
+    console.log('Already logged in, redirecting to dashboard')
     next('/dashboard')
   } else if (requiresAuth && !authStore.isLoggedIn) {
     // Store return URL for redirect after login
     authStore.returnUrl = to.fullPath
+    console.log('Not logged in, redirecting to scan page')
     next('/')
   } else {
     next()
   }
 })
-
 
 export default router
 {/code}
@@ -7116,12 +8512,17 @@ button:focus-visible {
 
 src/views/Dashboard.vue
 {code}
+<!-- src/views/Dashboard.vue -->
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useWalletStore } from '@/stores/wallet'
 import { useLanguage } from '@/composables/useLanguage'
+import { motion } from 'motion-v'
+import GlobalHeader from '@/components/common/GlobalHeader.vue'
+import HelpModal from '@/components/common/HelpModal.vue'
+import LanguageModal from '@/components/common/LanguageModal.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
 
 const router = useRouter()
@@ -7130,16 +8531,16 @@ const walletStore = useWalletStore()
 const { t } = useLanguage()
 
 const loading = ref(false)
+const showHelpModal = ref(false)
+const showLanguageModal = ref(false)
 
 const userName = computed(() => authStore.user?.name || 'Friend')
 
 onMounted(async () => {
-  // Sync wallet from server
   loading.value = true
   try {
     await authStore.fetchProfile()
     
-    // Update wallet from profile
     if (authStore.user?.wallet_balance !== undefined) {
       walletStore.syncWallet({
         balance: authStore.user.wallet_balance,
@@ -7153,30 +8554,18 @@ onMounted(async () => {
   }
 })
 
-const scanAnother = () => {
-  router.push('/')
-}
-
-const goToRedeem = () => {
-  router.push('/redeem')
-}
-
-const goToProfile = () => {
-  router.push('/profile')
-}
+const scanAnother = () => router.push('/')
+const goToRedeem = () => router.push('/redeem')
+const goToProfile = () => router.push('/profile')
 </script>
 
 <template>
   <div class="dashboard">
-    <!-- Header -->
-    <div class="header">
-      <div class="welcome">
-        <h1>{{ t('dashboard.welcome') }}, {{ userName }}! 👋</h1>
-      </div>
-      <button class="profile-btn" @click="goToProfile">
-        <span class="icon">👤</span>
-      </button>
-    </div>
+    <!-- Global Header -->
+    <GlobalHeader 
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
     
     <!-- Loading State -->
     <div v-if="loading" class="loading">
@@ -7186,11 +8575,39 @@ const goToProfile = () => {
     
     <!-- Main Content -->
     <div v-else class="content">
+      <!-- Welcome Section -->
+      <motion.div 
+        class="welcome-card"
+        :initial="{ opacity: 0, y: -20 }"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{ duration: 0.6 }"
+      >
+        <div class="welcome-text">
+          <span class="greeting">{{ t('dashboard.welcome') }}</span>
+          <h1>{{ userName }}! 👋</h1>
+        </div>
+        <button class="profile-btn" @click="goToProfile">
+          <span class="icon">👤</span>
+        </button>
+      </motion.div>
+
       <!-- Wallet Card -->
-      <div class="card wallet-card">
+      <motion.div 
+        class="card wallet-card"
+        :initial="{ opacity: 0, y: 20 }"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{ duration: 0.6, delay: 0.1 }"
+        :whileHover="{ y: -4 }"
+      >
         <div class="card-icon">💰</div>
         <h2 class="card-title">{{ t('dashboard.wallet') }}</h2>
-        <div class="balance">{{ walletStore.formattedBalance }}</div>
+        <motion.div 
+          class="balance"
+          :animate="{ scale: [1, 1.05, 1] }"
+          :transition="{ duration: 0.5 }"
+        >
+          {{ walletStore.formattedBalance }}
+        </motion.div>
         <BaseButton 
           @click="goToRedeem"
           variant="primary"
@@ -7198,10 +8615,16 @@ const goToProfile = () => {
         >
           {{ t('dashboard.redeemGifts') }}
         </BaseButton>
-      </div>
+      </motion.div>
       
       <!-- Lucky Draw Card -->
-      <div class="card ticket-card">
+      <motion.div 
+        class="card ticket-card"
+        :initial="{ opacity: 0, y: 20 }"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{ duration: 0.6, delay: 0.2 }"
+        :whileHover="{ y: -4 }"
+      >
         <div class="card-icon">🎟️</div>
         <h2 class="card-title">{{ t('dashboard.tickets') }}</h2>
         <div class="ticket-count">{{ walletStore.ticketCount }}</div>
@@ -7211,10 +8634,15 @@ const goToProfile = () => {
         >
           {{ t('dashboard.seePrizes') }}
         </BaseButton>
-      </div>
+      </motion.div>
       
       <!-- Scan Another -->
-      <div class="scan-section">
+      <motion.div 
+        class="scan-section"
+        :initial="{ opacity: 0 }"
+        :animate="{ opacity: 1 }"
+        :transition="{ duration: 0.6, delay: 0.3 }"
+      >
         <BaseButton 
           @click="scanAnother"
           variant="secondary"
@@ -7222,8 +8650,19 @@ const goToProfile = () => {
         >
           🔍 {{ t('dashboard.scanAnother') }}
         </BaseButton>
-      </div>
+      </motion.div>
     </div>
+
+    <!-- Modals -->
+    <HelpModal
+      :show="showHelpModal"
+      @close="showHelpModal = false"
+    />
+    
+    <LanguageModal
+      :show="showLanguageModal"
+      @close="showLanguageModal = false"
+    />
   </div>
 </template>
 
@@ -7231,21 +8670,69 @@ const goToProfile = () => {
 .dashboard {
   min-height: 100vh;
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  padding: 20px;
-  padding-bottom: 80px;
+  display: flex;
+  flex-direction: column;
 }
 
-.header {
+.loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(16, 185, 129, 0.2);
+  border-top-color: #10b981;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.content {
+  flex: 1;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+  width: 100%;
+}
+
+.welcome-card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 32px;
 }
 
-.welcome h1 {
+.welcome-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.greeting {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.welcome-card h1 {
   font-size: 24px;
   font-weight: 700;
   color: #1f2937;
+  margin: 0;
 }
 
 .profile-btn {
@@ -7270,30 +8757,6 @@ const goToProfile = () => {
   font-size: 24px;
 }
 
-.loading {
-  text-align: center;
-  padding: 60px 20px;
-}
-
-.spinner {
-  width: 48px;
-  height: 48px;
-  border: 4px solid rgba(16, 185, 129, 0.2);
-  border-top-color: #10b981;
-  border-radius: 50%;
-  margin: 0 auto 16px;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.content {
-  max-width: 600px;
-  margin: 0 auto;
-}
-
 .card {
   background: white;
   border-radius: 20px;
@@ -7302,10 +8765,6 @@ const goToProfile = () => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   text-align: center;
   transition: transform 0.3s;
-}
-
-.card:hover {
-  transform: translateY(-4px);
 }
 
 .card-icon {
@@ -7351,7 +8810,127 @@ src/views/LanguageSelect.vue
 
 src/views/ProfilePage.vue
 {code}
-<template><div>Profile Page</div></template>
+<!-- src/views/ProfilePage.vue -->
+<script setup>
+import { useRouter } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
+import { useLanguage } from '@/composables/useLanguage'
+import { ref } from 'vue'
+import GlobalHeader from '@/components/common/GlobalHeader.vue'
+import HelpModal from '@/components/common/HelpModal.vue'
+import LanguageModal from '@/components/common/LanguageModal.vue'
+
+const router = useRouter()
+const { logout, user } = useAuth()
+const { t } = useLanguage()
+
+const showHelpModal = ref(false)
+const showLanguageModal = ref(false)
+
+const handleLogout = () => {
+  logout()
+  router.push('/')
+}
+</script>
+
+<template>
+  <div class="profile-page">
+    <GlobalHeader 
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+    
+    <div class="content">
+      <h1>{{ t('profile.title') }}</h1>
+      <div class="profile-info">
+        <div class="info-item">
+          <span class="label">{{ t('profile.phone') }}:</span>
+          <span class="value">{{ user?.phone_number }}</span>
+        </div>
+        <div class="info-item">
+          <span class="label">{{ t('profile.name') }}:</span>
+          <span class="value">{{ user?.name }}</span>
+        </div>
+      </div>
+      <button @click="handleLogout" class="logout-btn">
+        {{ t('profile.logout') }}
+      </button>
+    </div>
+
+    <HelpModal :show="showHelpModal" @close="showHelpModal = false" />
+    <LanguageModal :show="showLanguageModal" @close="showLanguageModal = false" />
+  </div>
+</template>
+
+<style scoped>
+.profile-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  width: 100%;
+}
+
+h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 32px;
+}
+
+.profile-info {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.label {
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.value {
+  color: #1f2937;
+}
+
+.logout-btn {
+  width: 100%;
+  padding: 16px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.logout-btn:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+}
+</style>
 {/code}
 
 ================================================================================
@@ -7366,75 +8945,245 @@ src/views/RedeemPage.vue
 src/views/ScanPage.vue
 {code}
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWalletStore } from '@/stores/wallet'
 import { useAuthStore } from '@/stores/auth'
 import { useLanguage } from '@/composables/useLanguage'
 import { rewardAPI } from '@/api/endpoints'
+import { motion } from 'motion-v'
+import { Swiper, SwiperSlide } from 'swiper/vue'
+import { Autoplay, EffectCoverflow } from 'swiper/modules'
+import 'swiper/css'
+import 'swiper/css/effect-coverflow'
+import GlobalHeader from '@/components/common/GlobalHeader.vue'
+import HelpModal from '@/components/common/HelpModal.vue'
+import LanguageModal from '@/components/common/LanguageModal.vue'
 import ScratchCard from '@/components/reward/ScratchCard.vue'
 import OTPModal from '@/components/common/OTPModal.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
 import BaseInput from '@/components/common/BaseInput.vue'
+
+// *** FIXED: Import QR Scanner ***
+import { QrcodeStream } from 'vue-qrcode-reader'
 
 const router = useRouter()
 const walletStore = useWalletStore()
 const authStore = useAuthStore()
 const { t } = useLanguage()
 
-const step = ref('scan') // scan, scratch, login
+const step = ref('scan')
 const scannedCode = ref('')
 const loading = ref(false)
-const error = ref('')
+const error = ref('') // For scan validation
+const otpError = ref('')
 const showOTPModal = ref(false)
-const loginMode = ref(false) // true = login only, false = claim reward
-
-// Honeypot field for bot detection
+const showHelpModal = ref(false)
+const showLanguageModal = ref(false)
+const loginMode = ref(false)
 const honeypot = ref('')
+const gifts = ref([])
+
+// *** FIXED: Refs for QR Scanner ***
+const showScanner = ref(false)
+const scannerError = ref('')
+const cameraReady = ref(false)
+
+// *** FIX: Add local ref to keep reward visible during navigation ***
+const localPendingReward = ref(null)
+
+// Swiper modules
+const modules = [Autoplay, EffectCoverflow]
+
+// *** FIXED: Add barcode formats (explicitly set QR code) ***
+const barcodeFormats = ref(['qr_code'])
+
+// *** FIXED: Enhanced camera constraints with autofocus ***
+const cameraConstraints = computed(() => ({
+  facingMode: 'environment',
+  advanced: [
+    { focusMode: 'continuous' },
+    { zoom: 1.0 }
+  ]
+}))
+
+// Fetch gift slider data
+const fetchGifts = async () => {
+  try {
+    const response = await rewardAPI.getGiftSlider()
+    gifts.value = response.gifts
+  } catch (err) {
+    console.error('Failed to fetch gift slider:', err)
+  }
+}
+
+onMounted(() => {
+  console.log('ScanPage mounted')
+  fetchGifts()
+})
+
+// *** FIXED: Function to open scanner ***
+const openScanner = () => {
+  error.value = ''
+  scannerError.value = ''
+  cameraReady.value = false
+  showScanner.value = true
+}
+
+// *** FIXED: Function to close scanner ***
+const closeScanner = () => {
+  showScanner.value = false
+  cameraReady.value = false
+}
+
+// *** FIXED: Handle successful QR detection (changed from onDecode to onDetect) ***
+const onDetect = (detectedCodes) => {
+  if (detectedCodes && detectedCodes.length > 0) {
+    const decodedString = detectedCodes[0].rawValue
+    console.log('QR detected:', decodedString)
+    closeScanner()
+    
+    if (decodedString && /^[A-Z0-9]{12}$/i.test(decodedString)) {
+      scannedCode.value = decodedString.toUpperCase()
+      validateCode() // Auto-submit on valid scan
+    } else if (decodedString) {
+      // Scanned something, but it's not the right format
+      scannedCode.value = decodedString // Show it to the user
+      error.value = t('scan.invalid') // Show invalid error
+    }
+  }
+}
+
+// *** FIXED: Handle camera initialization and permissions ***
+const onScannerInit = async (promise) => {
+  scannerError.value = ''
+  try {
+    const { capabilities } = await promise
+    console.log('Camera initialized successfully', capabilities)
+    cameraReady.value = true
+    
+    // *** FIXED: Apply video constraints after camera is ready for better focus ***
+    if (capabilities) {
+      try {
+        // Additional focus optimization for mobile devices
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            focusMode: 'continuous',
+            zoom: true
+          }
+        })
+        console.log('Enhanced constraints applied')
+      } catch (constraintErr) {
+        console.warn('Could not apply enhanced constraints:', constraintErr)
+      }
+    }
+  } catch (err) {
+    console.error('Camera init error:', err)
+    cameraReady.value = false
+    
+    if (err.name === 'NotAllowedError') {
+      scannerError.value = t('errors.cameraPermission') || 'Camera permission denied. Please allow camera access.'
+    } else if (err.name === 'NotFoundError') {
+      scannerError.value = t('errors.cameraNotFound') || 'No camera found on this device.'
+    } else if (err.name === 'NotSupportedError') {
+      scannerError.value = 'Secure context required (HTTPS or localhost).'
+    } else if (err.name === 'NotReadableError') {
+      scannerError.value = 'Camera already in use by another application.'
+    } else if (err.name === 'OverconstrainedError') {
+      scannerError.value = 'Camera does not meet requirements.'
+    } else if (err.name === 'StreamApiNotSupportedError') {
+      scannerError.value = 'Camera API not supported in this browser.'
+    } else if (err.name === 'InsecureContextError') {
+      scannerError.value = 'Camera access only allowed on HTTPS or localhost.'
+    } else {
+      scannerError.value = t('errors.cameraError') || err.message || 'Camera error occurred.'
+    }
+  }
+}
+
+// *** FIXED: Handle scanner errors ***
+const onScannerError = (err) => {
+  console.error('Scanner error:', err)
+  scannerError.value = err.message || 'Scanner error occurred'
+}
+
+// *** FIXED: Camera ready handler ***
+const onCameraReady = () => {
+  console.log('Camera stream is ready')
+  cameraReady.value = true
+  scannerError.value = ''
+}
+
+// *** FIXED: Track function for visual feedback (helps with detection) ***
+const paintOutline = (detectedCodes, ctx) => {
+  for (const detectedCode of detectedCodes) {
+    const [firstPoint, ...otherPoints] = detectedCode.cornerPoints
+    
+    ctx.strokeStyle = '#10b981'
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.moveTo(firstPoint.x, firstPoint.y)
+    
+    for (const { x, y } of otherPoints) {
+      ctx.lineTo(x, y)
+    }
+    
+    ctx.lineTo(firstPoint.x, firstPoint.y)
+    ctx.closePath()
+    ctx.stroke()
+    
+    // Add a green fill with transparency
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.2)'
+    ctx.fill()
+  }
+}
 
 const validateCode = async () => {
   error.value = ''
-  
-  // Bot check
   if (honeypot.value) {
     error.value = 'Invalid request'
     return
   }
-  
-  // Validate code format (12 alphanumeric)
   if (!/^[A-Z0-9]{12}$/i.test(scannedCode.value)) {
     error.value = t('scan.invalid')
     return
   }
-  
   loading.value = true
-  
-  try {
+try {
     const response = await rewardAPI.validateCode(scannedCode.value)
     
-    console.log('Validate response:', response)
-    
-    // Store pending reward
+    // *** FIX: Set both store and local reward ***
     walletStore.setPendingReward(response)
+    localPendingReward.value = response
     
-    // Move to scratch card
     step.value = 'scratch'
   } catch (err) {
-    console.error('Validation error:', err)
-    error.value = err.message || t('errors.unknown')
+    // *** START OF FIX ***
+    if (err.response) {
+      // This handles all errors where the server sent a response (4xx, 5xx)
+      if (err.response.status === 404) {
+        // SPECIFIC FIX: 404 is "Code is invalid", as requested.
+        error.value = t('scan.invalid')
+      } else {
+        // SPECIFIC FIX: For other errors (like 409 "Already Used" or 400 "Bad Request"),
+        // show the message returned from the API, as requested.
+        error.value = err.response.data.message || err.message || t('errors.unknown')
+      }
+    } else {
+      // This handles network errors where no response was received
+      error.value = err.message || t('errors.unknown')
+    }
+    // *** END OF FIX ***
   } finally {
     loading.value = false
   }
-}
 
-const handleRevealed = () => {
-  console.log('Scratch card revealed')
 }
 
 const handleClaim = () => {
-  console.log('Claim button clicked')
-  loginMode.value = false // Claiming a reward
-  // Check if user is logged in
+  loginMode.value = false
+  error.value = '' // Clear main page error before opening modal
   if (authStore.isLoggedIn) {
     claimReward()
   } else {
@@ -7443,73 +9192,52 @@ const handleClaim = () => {
 }
 
 const handleLoginClick = () => {
-  console.log('Login button clicked')
-  loginMode.value = true // Just logging in
+  loginMode.value = true
+  error.value = '' // Clear main page error before opening modal
   showOTPModal.value = true
 }
 
 const handleOTPSuccess = async ({ phoneNumber, otpCode }) => {
-  console.log('OTP verified, attempting login')
-  
+  loading.value = true
+  otpError.value = '' 
+  error.value = ''
   try {
-    // Login
     const result = await authStore.loginWithOTP(phoneNumber, otpCode)
-    
     if (result.success) {
-      console.log('Login successful')
       showOTPModal.value = false
-      
-      // If in claim mode, claim the reward
-      if (!loginMode.value && walletStore.pendingReward) {
+      otpError.value = ''
+      // *** FIX: Check localPendingReward ***
+      if (!loginMode.value && localPendingReward.value) {
         await claimReward()
       } else {
-        // Just logging in, go to dashboard
         await router.push('/dashboard')
       }
     } else {
-      console.error('Login failed:', result.error)
-      error.value = result.error || 'Login failed'
+      otpError.value = result.error || 'Login failed'
     }
   } catch (err) {
-    console.error('OTP verification error:', err)
-    error.value = err.message || 'Verification failed'
+    otpError.value = err.message || 'Verification failed'
+  } finally {
+    loading.value = false
   }
 }
 
 const claimReward = async () => {
-  if (!walletStore.pendingReward) {
-    console.error('No pending reward found')
-    error.value = 'No reward to claim'
-    return
-  }
-  
-  console.log('Claiming reward:', walletStore.pendingReward)
+  // *** FIX: Check localPendingReward ***
+  if (!localPendingReward.value) return
   loading.value = true
-  
   try {
-    const response = await rewardAPI.claimReward(walletStore.pendingReward.codeToken)
-    
-    console.log('Claim response:', response)
-    
-    // Update wallet based on API response
+    // *** FIX: Use token from local reward ***
+    const response = await rewardAPI.claimReward(localPendingReward.value.code_token)
     if (response.new_wallet_balance !== undefined) {
       walletStore.syncWallet({
         balance: response.new_wallet_balance,
-        lucky_draw_tickets: response.lucky_draw_tickets || walletStore.pendingReward.tickets
+        // *** FIX: Use tickets from local reward as fallback ***
+        lucky_draw_tickets: response.draw_tickets_earned || localPendingReward.value.tickets
       })
-    } else {
-      // Fallback: Add pending reward amounts
-      walletStore.addReward(
-        walletStore.pendingReward.cashbackAmount,
-        walletStore.pendingReward.tickets
-      )
     }
-    
-    // Navigate to dashboard
-    console.log('Redirecting to dashboard')
     await router.push('/dashboard')
   } catch (err) {
-    console.error('Claim error:', err)
     error.value = err.message || t('errors.unknown')
   } finally {
     loading.value = false
@@ -7519,109 +9247,625 @@ const claimReward = async () => {
 
 <template>
   <div class="scan-page">
-    <!-- Step 1: Enter Code -->
-    <div v-if="step === 'scan'" class="scan-container">
-      <div class="logo">🎁</div>
-      <h1 class="title">{{ t('scan.title') }}</h1>
+    <div class="animated-bg">
+      <div class="gradient-orb orb-1"></div>
+      <div class="gradient-orb orb-2"></div>
+      <div class="gradient-orb orb-3"></div>
       
-      <div class="form-container">
-        <!-- Honeypot (hidden) -->
-        <input v-model="honeypot" type="text" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off" />
-        
-        <BaseInput
-          v-model="scannedCode"
-          type="text"
-          :placeholder="t('scan.placeholder')"
-          maxlength="12"
-          :error="error"
-          style="text-transform: uppercase"
-        />
-        
-        <BaseButton 
-          @click="validateCode"
-          :loading="loading"
-          :disabled="scannedCode.length !== 12"
+      <div class="float-item money-1">💵</div>
+      <div class="float-item money-2">💰</div>
+      <div class="float-item money-3">💸</div>
+      <div class="float-item gift-1">🎁</div>
+      <div class="float-item gift-2">🎉</div>
+      <div class="float-item gift-3">🏆</div>
+      <div class="float-item coin-1">🪙</div>
+      <div class="float-item coin-2">💎</div>
+      <div class="float-item star-1">⭐</div>
+      <div class="float-item star-2">✨</div>
+      <div class="float-item trophy-1">🥇</div>
+      <div class="float-item prize-1">🎊</div>
+      
+      <div class="bounce-item item-1">💵</div>
+      <div class="bounce-item item-2">🎁</div>
+      <div class="bounce-item item-3">💰</div>
+      <div class="bounce-item item-4">🏅</div>
+      <div class="bounce-item item-5">💎</div>
+      <div class="bounce-item item-6">🎟️</div>
+    </div>
+
+    <GlobalHeader 
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+
+    <div class="page-content">
+      <div v-if="step === 'scan'" class="scan-container">
+        <motion.div 
+          class="prize-badge"
+          :animate="{ 
+            scale: [1, 1.1, 1],
+            rotate: [0, -5, 5, 0]
+          }"
+          :transition="{ 
+            duration: 2,
+            repeat: Infinity,
+            repeatDelay: 1
+          }"
         >
-          {{ t('scan.submit') }}
-        </BaseButton>
+          <div class="badge-shine"></div>
+          <span class="badge-text">🎊 WIN AMAZING PRIZES! 🎊</span>
+        </motion.div>
+
+        <motion.div 
+          class="carousel-section"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ duration: 0.6 }"
+        >
+          <Swiper
+            :modules="modules"
+            :slides-per-view="4"
+            :space-between="15"
+            :loop="true"
+            :autoplay="{
+              delay: 2000,
+              disableOnInteraction: false,
+            }"
+            :speed="1000"
+            :breakpoints="{
+              320: { slidesPerView: 2, spaceBetween: 10 },
+              480: { slidesPerView: 3, spaceBetween: 12 },
+              640: { slidesPerView: 4, spaceBetween: 15 }
+            }"
+            class="gifts-swiper"
+          >
+            <SwiperSlide v-for="gift in gifts" :key="gift.id">
+              <motion.div 
+                class="gift-card"
+                :whileHover="{ scale: 1.05, y: -5 }"
+              >
+                <img :src="gift.image" :alt="gift.name" class="gift-image" />
+                <div class="gift-name">{{ gift.name }}</div>
+              </motion.div>
+            </SwiperSlide>
+          </Swiper>
+        </motion.div>
+
+        <motion.div 
+          class="excitement-chips"
+          :initial="{ opacity: 0 }"
+          :animate="{ opacity: 1 }"
+          :transition="{ delay: 0.3 }"
+        >
+          <motion.div 
+            class="chip"
+            :animate="{ scale: [1, 1.05, 1] }"
+            :transition="{ duration: 1.5, repeat: Infinity, delay: 0 }"
+          >
+            💵 Instant Cash
+          </motion.div>
+          <motion.div 
+            class="chip"
+            :animate="{ scale: [1, 1.05, 1] }"
+            :transition="{ duration: 1.5, repeat: Infinity, delay: 0.3 }"
+          >
+            🎁 Free Gifts
+          </motion.div>
+          <motion.div 
+            class="chip"
+            :animate="{ scale: [1, 1.05, 1] }"
+            :transition="{ duration: 1.5, repeat: Infinity, delay: 0.6 }"
+          >
+            🏆 Big Prizes
+          </motion.div>
+        </motion.div>
         
-        <!-- Divider -->
-        <div class="divider">
-          <span>OR</span>
-        </div>
-        
-        <!-- Login Button -->
-        <button class="login-link" @click="handleLoginClick">
-          Already have an account? <strong>Login</strong>
-        </button>
+        <motion.div 
+          class="form-container"
+          :initial="{ opacity: 0, scale: 0.95 }"
+          :animate="{ opacity: 1, scale: 1 }"
+          :transition="{ duration: 0.6, delay: 0.4 }"
+        >
+          <div class="form-glow"></div>
+          
+          <motion.button
+            class="scan-qr-button"
+            @click="openScanner"
+            :whileHover="{ scale: 1.02, backgroundColor: '#f0fdf4' }"
+            :whileTap="{ scale: 0.98 }"
+          >
+            <span class="scan-icon">📷</span>
+            <strong>{{ t('scan.scanButton') }}</strong>
+          </motion.button>
+          
+          <div class="divider or-divider">
+            <span>{{ t('scan.orEnterCode') }}</span>
+          </div>
+          
+          <input v-model="honeypot" type="text" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off" />
+          
+          <div class="input-wrapper">
+            <BaseInput
+              v-model="scannedCode"
+              type="text"
+              :placeholder="t('scan.placeholder')"
+              maxlength="12"
+              :error="error"
+              style="text-transform: uppercase"
+            />
+          </div>
+          
+          <motion.div
+            :whileHover="{ scale: 1.02 }"
+            :whileTap="{ scale: 0.98 }"
+          >
+            <BaseButton 
+              @click="validateCode"
+              :loading="loading"
+              :disabled="scannedCode.length !== 12"
+              class="check-button"
+            >
+              <span v-if="!loading" class="button-content">
+                <span class="button-icon">🎯</span>
+                {{ t('scan.submit') }}
+                <span class="button-shine"></span>
+              </span>
+            </BaseButton>
+          </motion.div>
+          
+          <div class="divider">
+            <span>{{ t('scan.loginPrompt') }}</span>
+          </div>
+          
+          <motion.button 
+            class="login-link"
+            @click="handleLoginClick"
+            :whileHover="{ scale: 1.02, backgroundColor: '#f0fdf4' }"
+            :whileTap="{ scale: 0.98 }"
+          >
+            <span class="login-icon">👤</span>
+            <strong>{{ t('scan.loginButton') }}</strong>
+          </motion.button>
+        </motion.div>
+
+        <motion.div 
+          class="winner-showcase"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ delay: 0.6 }"
+        >
+          <div class="winner-badge">🏅 Recent Winners</div>
+          <div class="winners-scroll">
+            <motion.div 
+              class="winner-item"
+              :animate="{ x: [-300, 0] }"
+              :transition="{ duration: 20, repeat: Infinity, ease: 'linear' }"
+            >
+              <span>Raj K. won <strong>₹500</strong> 💰</span>
+              <span>Priya S. won <strong>Mixer</strong> 🥤</span>
+              <span>Amit P. won <strong>₹1000</strong> 💵</span>
+            </motion.div>
+          </div>
+        </motion.div>
+      </div>
+      
+      <div v-if="step === 'scratch'" class="scratch-container">
+        <ScratchCard
+           v-if="localPendingReward"
+           :cashback-amount="localPendingReward.cashback_amount"
+           :tickets="localPendingReward.tickets"
+           @revealed="() => {}"
+           @claim="handleClaim"
+         />
+        <p v-if="error" class="error-text">{{ error }}</p>
       </div>
     </div>
     
-    <!-- Step 2: Scratch Card -->
-    <div v-if="step === 'scratch'" class="scratch-container">
-      <ScratchCard
-        v-if="walletStore.pendingReward"
-        :cashback-amount="walletStore.pendingReward.cashbackAmount"
-        :tickets="walletStore.pendingReward.tickets"
-        @revealed="handleRevealed"
-        @claim="handleClaim"
-      />
-      
-      <p v-if="error" class="error-text">{{ error }}</p>
-    </div>
-    
-    <!-- OTP Modal -->
     <OTPModal 
       :show="showOTPModal"
-      @close="showOTPModal = false"
+      :error="otpError" 
+      @close="showOTPModal = false; otpError = ''" 
       @success="handleOTPSuccess"
     />
+    <HelpModal :show="showHelpModal" @close="showHelpModal = false" />
+    <LanguageModal :show="showLanguageModal" @close="showLanguageModal = false" />
+    
+    <div v-if="loading && !showOTPModal" class="loading-overlay">
+      <div class="spinner-ring"></div>
+      <p>{{ t('common.loading') }}</p>
+    </div>
+
+    <!-- *** FIXED: QR Scanner Modal with all enhancements *** -->
+    <div v-if="showScanner" class="scanner-modal">
+      <QrcodeStream
+        @detect="onDetect"
+        @init="onScannerInit"
+        @error="onScannerError"
+        @camera-on="onCameraReady"
+        :constraints="cameraConstraints"
+        :formats="barcodeFormats"
+        :track="paintOutline"
+        class="scanner-video"
+      />
+      
+      <button @click="closeScanner" class="close-scanner-btn" aria-label="Close scanner">
+        ✕
+      </button>
+      
+      <div class="scanner-overlay-content">
+        <div class="scanner-box">
+          <div class="scanner-corners">
+            <div class="corner corner-tl"></div>
+            <div class="corner corner-tr"></div>
+            <div class="corner corner-bl"></div>
+            <div class="corner corner-br"></div>
+          </div>
+          <div class="scanner-line"></div>
+        </div>
+        
+        <div class="scanner-instructions">
+          <p v-if="!cameraReady" class="scanner-text loading-text">
+            {{ t('scan.initializingCamera') || 'Initializing camera...' }}
+          </p>
+          <p v-else class="scanner-text">
+            {{ t('scan.scannerPrompt') || 'Position QR code within the frame' }}
+          </p>
+        </div>
+        
+        <div v-if="scannerError" class="scanner-error-display">
+          <span class="error-icon">⚠️</span>
+          {{ scannerError }}
+        </div>
+        
+        <div v-if="cameraReady" class="scanner-status">
+          <span class="status-indicator active"></span>
+          <span class="status-text">Camera Active</span>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .scan-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Animated Background */
+.animated-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.gradient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.6;
+  animation: float-orb 20s infinite ease-in-out;
+}
+
+.orb-1 {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, #ffd700, transparent);
+  top: -100px;
+  left: -100px;
+}
+
+.orb-2 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, #ff6b6b, transparent);
+  bottom: -150px;
+  right: -150px;
+}
+
+.orb-3 {
+  width: 250px;
+  height: 250px;
+  background: radial-gradient(circle, #4ecdc4, transparent);
+  top: 40%;
+  right: 10%;
+}
+
+@keyframes float-orb {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -30px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+}
+
+/* Floating Items */
+.float-item {
+  position: absolute;
+  font-size: 32px;
+  animation: float-up 8s infinite ease-in-out;
+  opacity: 0.8;
+}
+
+.money-1 { top: 10%; left: 5%; animation-delay: 0s; }
+.money-2 { top: 30%; right: 10%; animation-delay: 1s; }
+.money-3 { bottom: 25%; left: 8%; animation-delay: 2s; }
+.gift-1 { top: 50%; left: 15%; animation-delay: 3s; }
+.gift-2 { bottom: 15%; right: 20%; animation-delay: 4s; }
+.gift-3 { top: 20%; right: 25%; animation-delay: 5s; }
+.coin-1 { top: 70%; left: 25%; animation-delay: 1.5s; }
+.coin-2 { top: 40%; right: 5%; animation-delay: 2.5s; }
+.star-1 { bottom: 40%; left: 12%; animation-delay: 3.5s; }
+.star-2 { top: 60%; right: 15%; animation-delay: 4.5s; }
+.trophy-1 { bottom: 30%; right: 8%; animation-delay: 5.5s; }
+.prize-1 { top: 80%; left: 30%; animation-delay: 6s; }
+
+@keyframes float-up {
+  0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.8; }
+  50% { transform: translateY(-30px) rotate(180deg); opacity: 1; }
+}
+
+/* Bouncing Items */
+.bounce-item {
+  position: absolute;
+  font-size: 28px;
+  animation: bounce-around 6s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.item-1 { top: 15%; left: 20%; animation-delay: 0s; }
+.item-2 { top: 35%; right: 18%; animation-delay: 1s; }
+.item-3 { bottom: 20%; left: 22%; animation-delay: 2s; }
+.item-4 { top: 55%; right: 12%; animation-delay: 3s; }
+.item-5 { bottom: 45%; left: 10%; animation-delay: 4s; }
+.item-6 { top: 25%; left: 35%; animation-delay: 5s; }
+
+@keyframes bounce-around {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(20px, -20px) scale(1.2); }
+  50% { transform: translate(-15px, 15px) scale(0.9); }
+  75% { transform: translate(15px, -10px) scale(1.1); }
+}
+
+.page-content {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  position: relative;
+  z-index: 1;
 }
 
-.scan-container,
-.scratch-container {
+.scan-container {
   width: 100%;
   max-width: 500px;
   text-align: center;
 }
 
-.logo {
-  font-size: 80px;
+.scratch-container {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+/* Prize Badge */
+.prize-badge {
+  position: relative;
+  display: inline-block;
+  background: linear-gradient(135deg, #ffd700, #ffed4e);
+  color: #000;
+  padding: 10px 20px;
+  border-radius: 50px;
+  font-size: 16px;
+  font-weight: 800;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(255, 215, 0, 0.6),
+              inset 0 2px 4px rgba(255, 255, 255, 0.5);
+  border: 3px solid #fff;
+  overflow: hidden;
+}
+
+.badge-shine {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  animation: shine 3s infinite;
+}
+
+@keyframes shine {
+  to { left: 200%; }
+}
+
+/* Carousel Section */
+.carousel-section {
   margin-bottom: 24px;
-  animation: bounce 2s infinite;
+  padding: 0 10px;
 }
 
-@keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+.gifts-swiper {
+  padding: 10px 0;
 }
 
-.title {
-  font-size: 28px;
+.gift-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  padding: 12px 8px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 2px solid rgba(255, 215, 0, 0.3);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.gift-image {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+  margin: 0 auto 6px auto;
+  display: block;
+}
+
+.gift-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gift-points {
+  font-size: 10px;
   font-weight: 700;
-  color: white;
-  margin-bottom: 32px;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  color: #10b981;
 }
 
-.form-container {
-  background: white;
-  padding: 32px;
+/* Excitement Chips */
+.excitement-chips {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.chip {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  padding: 6px 14px;
   border-radius: 20px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+/* Form Container */
+.form-container {
+  position: relative;
+  background: rgba(255, 255, 255, 0.98);
+  padding: 32px 28px;
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3),
+              0 0 40px rgba(255, 215, 0, 0.3);
+  border: 3px solid rgba(255, 215, 0, 0.5);
+}
+
+.form-glow {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, #ffd700, #ff6b6b, #4ecdc4, #ffd700);
+  background-size: 400% 400%;
+  border-radius: 24px;
+  z-index: -1;
+  opacity: 0.6;
+  animation: glow-rotate 4s linear infinite;
+  filter: blur(8px);
+}
+
+@keyframes glow-rotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Scan QR Button */
+.scan-qr-button {
+  width: 100%;
+  padding: 14px;
+  background: white;
+  border: 3px solid #10b981;
+  border-radius: 12px;
+  color: #10b981;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  transition: all 0.3s ease;
+}
+
+.scan-qr-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+}
+
+.scan-icon {
+  font-size: 20px;
+}
+
+/* "Or" Divider */
+.divider.or-divider {
+  margin: 20px 0;
+}
+
+.input-wrapper {
+  margin-bottom: 18px;
+}
+
+/* Check Button */
+.check-button {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  font-size: 18px;
+  font-weight: 800;
+  padding: 16px 32px;
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+}
+
+.button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+
+.button-icon {
+  font-size: 22px;
+  animation: bounce-icon 1s infinite;
+}
+
+@keyframes bounce-icon {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.button-shine {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  animation: button-shine 2s infinite;
+}
+
+@keyframes button-shine {
+  to { left: 200%; }
+}
+
+/* Divider */
 .divider {
   position: relative;
   text-align: center;
@@ -7634,50 +9878,467 @@ const claimReward = async () => {
   top: 50%;
   left: 0;
   right: 0;
-  height: 1px;
-  background: #e5e7eb;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #e5e7eb, transparent);
 }
 
 .divider span {
   position: relative;
   background: white;
-  padding: 0 12px;
-  color: #9ca3af;
-  font-size: 14px;
+  padding: 0 14px;
+  color: #6b7280;
+  font-size: 13px;
   font-weight: 600;
 }
 
+/* Login Link */
 .login-link {
   width: 100%;
   padding: 14px;
-  background: transparent;
-  border: 2px solid #e5e7eb;
-  border-radius: 10px;
-  color: #6b7280;
+  background: white;
+  border: 3px solid #10b981;
+  border-radius: 12px;
+  color: #10b981;
   font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.3s;
   font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  transition: all 0.3s ease;
 }
 
 .login-link:hover {
-  border-color: #10b981;
-  color: #10b981;
-  background: #f0fdf4;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
 }
 
-.login-link strong {
-  color: #10b981;
+.login-icon {
+  font-size: 18px;
+}
+
+/* Winner Showcase */
+.winner-showcase {
+  margin-top: 24px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  padding: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+}
+
+.winner-badge {
+  font-size: 13px;
   font-weight: 700;
+  color: #ffd700;
+  margin-bottom: 10px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.winners-scroll {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.winner-item {
+  display: inline-flex;
+  gap: 24px;
+}
+
+.winner-item span {
+  display: inline-block;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 14px;
+  background: rgba(255, 215, 0, 0.2);
+  border-radius: 8px;
+}
+
+.winner-item strong {
+  color: #ffd700;
+}
+
+/* Loading & Error */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.spinner-ring {
+  width: 60px;
+  height: 60px;
+  border: 6px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #ffd700;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-overlay p {
+  color: white;
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .error-text {
-  color: #fee;
-  background: rgba(239, 68, 68, 0.2);
+  color: #fee2e2;
+  background: rgba(239, 68, 68, 0.25);
   padding: 12px;
   border-radius: 8px;
   margin-top: 16px;
   font-weight: 600;
+}
+
+/* *** FIXED: Enhanced QR Scanner Modal Styles *** */
+.scanner-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scanner-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.close-scanner-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 2002;
+  background: rgba(255, 255, 255, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  color: white;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font-size: 24px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.close-scanner-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+  transform: scale(1.1);
+}
+
+.scanner-overlay-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2001;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* *** FIXED: Enhanced scanner box with animated corners *** */
+.scanner-box {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  border-radius: 24px;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(5px);
+  overflow: hidden;
+}
+
+.scanner-corners {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.corner {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border: 4px solid #10b981;
+  animation: corner-pulse 2s infinite;
+}
+
+.corner-tl {
+  top: 0;
+  left: 0;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 24px;
+}
+
+.corner-tr {
+  top: 0;
+  right: 0;
+  border-left: none;
+  border-bottom: none;
+  border-top-right-radius: 24px;
+}
+
+.corner-bl {
+  bottom: 0;
+  left: 0;
+  border-right: none;
+  border-top: none;
+  border-bottom-left-radius: 24px;
+}
+
+.corner-br {
+  bottom: 0;
+  right: 0;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 24px;
+}
+
+@keyframes corner-pulse {
+  0%, 100% {
+    opacity: 1;
+    border-color: #10b981;
+  }
+  50% {
+    opacity: 0.5;
+    border-color: #34d399;
+  }
+}
+
+/* *** FIXED: Animated scanning line *** */
+.scanner-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #10b981, transparent);
+  box-shadow: 0 0 20px #10b981, 0 0 40px #10b981;
+  animation: scan-line 2s ease-in-out infinite;
+}
+
+@keyframes scan-line {
+  0% {
+    top: 0;
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+.scanner-instructions {
+  margin-top: 32px;
+  text-align: center;
+}
+
+.scanner-text {
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  padding: 12px 24px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.loading-text {
+  animation: pulse-text 1.5s infinite;
+}
+
+@keyframes pulse-text {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.scanner-error-display {
+  position: absolute;
+  bottom: 100px;
+  left: 20px;
+  right: 20px;
+  background: #ef4444;
+  color: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+  z-index: 2003;
+  pointer-events: all;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  animation: slide-up 0.3s ease-out;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.error-icon {
+  font-size: 20px;
+}
+
+/* *** FIXED: Camera status indicator *** */
+.scanner-status {
+  position: absolute;
+  bottom: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 8px 16px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.status-indicator.active {
+  animation: blink-indicator 1.5s infinite;
+  box-shadow: 0 0 10px #10b981;
+}
+
+@keyframes blink-indicator {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.status-text {
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .prize-badge { 
+    font-size: 14px; 
+    padding: 8px 16px; 
+  }
+  
+  .excitement-chips { 
+    gap: 8px; 
+  }
+  
+  .chip { 
+    font-size: 11px; 
+    padding: 5px 12px; 
+  }
+  
+  .form-container { 
+    padding: 28px 24px; 
+  }
+  
+  .check-button { 
+    font-size: 16px; 
+    padding: 14px 28px; 
+  }
+  
+  .gift-image {
+    width: 100px;
+    height: 60px;
+  }
+  
+  .gift-name { 
+    font-size: 10px; 
+  }
+  
+  .scanner-box {
+    width: 240px;
+    height: 240px;
+  }
+  
+  .corner {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+  }
+  
+  .scanner-text {
+    font-size: 14px;
+    padding: 10px 20px;
+  }
+  
+  .close-scanner-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    top: 16px;
+    right: 16px;
+  }
+}
+
+/* *** FIXED: Additional mobile optimizations *** */
+@media (max-width: 480px) {
+  .scanner-box {
+    width: 220px;
+    height: 220px;
+  }
+  
+  .scanner-text {
+    font-size: 13px;
+  }
+  
+  .scanner-error-display {
+    font-size: 13px;
+    padding: 14px 18px;
+    left: 16px;
+    right: 16px;
+  }
 }
 </style>
 {/code}
@@ -7822,7 +10483,7 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'robots.txt'],
       manifest: {
-        name: 'Nirva Loyalty Program',
+        name: 'Nirva Biolastic Loyalty Program',
         short_name: 'Nirva',
         description: 'Scan QR codes, earn cashback, redeem rewards',
         theme_color: '#10b981',

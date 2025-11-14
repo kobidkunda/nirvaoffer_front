@@ -78,6 +78,22 @@ const { t } = useLanguage()
               <p>{{ t('help.step3Description') }}</p>
             </div>
           </motion.div>
+
+
+                    <motion.div
+            class="step"
+            :initial="{ opacity: 0, x: -20 }"
+            :animate="{ opacity: 1, x: 0 }"
+            :transition="{ delay: 0.3 }"
+          >
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <h3>{{ t('help.step4Title') }}</h3>
+              <p style="color: green;font-size: 22px;"> <b>{{ t('help.step4Description') }}</b></p>
+            </div>
+          </motion.div>
+
+
         </div>
 
         <BaseButton @click="emit('close')" variant="primary">
