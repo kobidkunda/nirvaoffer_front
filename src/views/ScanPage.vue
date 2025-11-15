@@ -141,9 +141,15 @@ const handleClaim = () => {
 }
 
 const handleLoginClick = () => {
-  loginMode.value = true
-  error.value = '' // Clear main page error before opening modal
-  showOTPModal.value = true
+  if (authStore.isLoggedIn) {
+    // If user is logged in, navigate to redeem page
+    router.push('/redeem')
+  } else {
+    // If not logged in, show login modal
+    loginMode.value = true
+    error.value = '' // Clear main page error before opening modal
+    showOTPModal.value = true
+  }
 }
 
 const handleOTPSuccess = async ({ phoneNumber, otpCode }) => {
