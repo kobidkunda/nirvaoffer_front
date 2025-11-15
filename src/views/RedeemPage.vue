@@ -253,7 +253,7 @@ const goToDashboard = () => router.push('/dashboard')
                   {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : t('productDetails.addToCart') }}
                 </BaseButton>
                 <span :class="{ 'out-of-stock': product.stock_quantity === 0 }">
-                  {{ product.stock_quantity === 0 ? '' : `${t('productDetails.stock')}: ${product.stock_quantity}` }}
+                  {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : '' }}
                 </span>
               </div>
             </div>

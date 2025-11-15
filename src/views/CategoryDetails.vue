@@ -146,7 +146,7 @@ const goBack = () => router.back()
                       {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : t('productDetails.addToCart') }}
                     </BaseButton>
                     <span :class="{ 'out-of-stock': product.stock_quantity === 0 }">
-                      {{ product.stock_quantity === 0 ? '' : `Stock: ${product.stock_quantity}` }}
+                      {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : '' }}
                     </span>
                   </div>
                 </div>

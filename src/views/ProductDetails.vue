@@ -234,10 +234,8 @@ const goBack = () => router.back()
               <span class="redemption-cost">{{ t('redeem.redeemFor') }} ₹{{ product.redemption_cost }}</span>
               <span v-if="product.cashback_percentage" class="cashback">Cashback: {{ product.cashback_percentage }}%</span>
             </div>
-            <div class="stock-info">
-              <span :class="{ 'out-of-stock': product.stock_quantity === 0 }">
-                {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : `${t('productDetails.stock')}: ${product.stock_quantity}` }}
-              </span>
+            <div v-if="product.stock_quantity === 0" class="stock-info">
+              <span class="out-of-stock">{{ t('productDetails.outOfStock') }}</span>
             </div>
             <div v-if="product.video_url" class="video-section">
               <h3>Product Video</h3>
