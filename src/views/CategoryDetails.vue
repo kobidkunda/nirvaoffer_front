@@ -103,7 +103,7 @@ const goBack = () => router.back()
       <div v-else-if="category" class="category-content">
         <div class="category-header">
           <div class="category-image">
-            <img :src="(category.images?.large || category.images?.original || '').replace('https://offer-api.nirva-naturals.com', '')" :alt="category.name" />
+            <img :src="(category.images?.large || category.images?.original || '')" :alt="category.name" />
           </div>
           <div class="category-info">
             <h1 class="category-name">{{ category.name }}</h1>
@@ -127,7 +127,7 @@ const goBack = () => router.back()
               @click="router.push('/product/' + product.id)"
             >
               <div class="product-image">
-                <img :src="product.images[0]?.medium.replace('https://offer-api.nirva-naturals.com', '')" :alt="product.name" />
+                <img :src="product.images[0]?.medium" :alt="product.name" />
               </div>
               <div class="product-info">
                 <h3 class="product-name">{{ product.brand }} - {{ product.name }}</h3>

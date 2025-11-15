@@ -217,7 +217,7 @@ const goBack = () => router.back()
             >
               <SwiperSlide v-for="image in product.images" :key="image.thumb">
                 <img
-                  :src="image.large.replace('https://offer-api.nirva-naturals.com', '')"
+                  :src="image.large"
                   :alt="product.name"
                   class="product-image"
                 />
@@ -241,7 +241,7 @@ const goBack = () => router.back()
             </div>
             <div v-if="product.video_url" class="video-section">
               <h3>Product Video</h3>
-              <video controls :src="product.video_url.replace('https://offer-api.nirva-naturals.com', '')" class="product-video"></video>
+              <video controls :src="product.video_url" class="product-video"></video>
             </div>
           </div>
         </motion.div>

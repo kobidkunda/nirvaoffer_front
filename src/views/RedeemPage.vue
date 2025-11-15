@@ -189,7 +189,7 @@ const goToDashboard = () => router.push('/dashboard')
         >
           <SwiperSlide v-for="category in categories" :key="category.id">
             <div class="category-card" @click="router.push('/category/' + category.slug)">
-              <img :src="category.images.thumb.replace('https://offer-api.nirva-naturals.com', '')" :alt="category.name" class="category-image" />
+              <img :src="category.images.thumb" :alt="category.name" class="category-image" />
               <h3 class="category-name">{{ category.name }}</h3>
               <p class="category-count">{{ category.products_count }} products</p>
             </div>
@@ -234,7 +234,7 @@ const goToDashboard = () => router.push('/dashboard')
           @click="router.push('/product/' + product.id)"
         >
           <div class="product-image">
-            <img :src="product.images[0]?.medium.replace('https://offer-api.nirva-naturals.com', '')" :alt="product.name" />
+            <img :src="product.images[0]?.medium" :alt="product.name" />
           </div>
           <div class="product-info">
             <h3 class="product-name">{{ product.brand }} - {{ product.name }}</h3>
