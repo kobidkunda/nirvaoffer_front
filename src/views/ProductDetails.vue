@@ -269,13 +269,6 @@ const goBack = () => router.back()
             >
               {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : t('productDetails.addToCart') }}
             </BaseButton>
-            <BaseButton
-              @click="handleRedeemClick"
-              :disabled="walletBalance < product.redemption_cost || product.stock_quantity === 0"
-              size="large"
-            >
-              {{ product.stock_quantity === 0 ? 'Out of Stock' : t('redeem.redeemNow') }}
-            </BaseButton>
           </div>
         </motion.div>
       </div>
