@@ -4,11 +4,15 @@ import { useRouter } from 'vue-router'
 // IMPORTS REMOVED:
 // 'useAuthStore', 'useWalletStore', and 'useLanguage' are
 // auto-imported by 'unplugin-auto-import' (see vite.config.js)
-import { redemptionAPI } from '@/api/endpoints'
+import { shopAPI } from '@/api/endpoints'
+import { useCartStore } from '@/stores/cart'
 import { motion, AnimatePresence } from 'motion-v'
+import { Swiper, SwiperSlide } from 'swiper/vue'
+import 'swiper/css'
 
 // Import Common Components
 import GlobalHeader from '@/components/common/GlobalHeader.vue'
+import FloatingActions from '@/components/common/FloatingActions.vue'
 import HelpModal from '@/components/common/HelpModal.vue'
 import LanguageModal from '@/components/common/LanguageModal.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
@@ -18,44 +22,63 @@ import BaseInput from '@/components/common/BaseInput.vue'
 const router = useRouter()
 const authStore = useAuthStore() // This now works globally
 const walletStore = useWalletStore() // This now works globally
+const cartStore = useCartStore()
 const { t, locale } = useLanguage() // This now works globally
 
 // --- Page State ---
+const loadingSlider = ref(true)
+const loadingCategories = ref(true)
 const loadingProducts = ref(true)
 const placingOrder = ref(false)
+const slider = ref([])
+const categories = ref([])
 const products = ref([])
 const error = ref('')
 const successMessage = ref('')
 
+// --- Cart State ---
+const addingToCart = ref(null)
+
 // --- Modal State ---
 const showHelpModal = ref(false)
 const showLanguageModal = ref(false)
-const selectedProduct = ref(null)
-const showConfirmModal = ref(false)
-const showAddressModal = ref(false)
-const addressError = ref('')
-
-// Address form state, pre-filled if user data exists
-const address = ref({
-  line1: authStore.user?.shipping_address?.line1 || '',
-  city: authStore.user?.shipping_address?.city || '',
-  state: authStore.user?.shipping_address?.state || '',
-  pincode: authStore.user?.shipping_address?.pincode || ''
-})
 
 // --- Computed Properties ---
 const walletBalance = computed(() => walletStore.balance)
 const formattedBalance = computed(() => walletStore.formattedBalance)
-const userAddress = computed(() => authStore.user?.shipping_address)
 
 // --- Data Fetching ---
+const fetchSlider = async () => {
+  loadingSlider.value = true
+  try {
+    const response = await shopAPI.getSlider()
+    slider.value = response.slides || []
+  } catch (err) {
+    console.error('Failed to fetch slider:', err)
+  } finally {
+    loadingSlider.value = false
+  }
+}
+
+const fetchCategories = async () => {
+  loadingCategories.value = true
+  try {
+    const response = await shopAPI.getCategories(locale.value)
+    categories.value = response.categories || []
+  } catch (err) {
+    console.error('Failed to fetch categories:', err)
+  } finally {
+    loadingCategories.value = false
+  }
+}
+
 const fetchProducts = async () => {
   loadingProducts.value = true
   error.value = ''
   try {
     // Fetch products using the currently selected language
-    const response = await redemptionAPI.getProducts(locale.value)
-    products.value = response.products || []
+    const response = await shopAPI.getProducts(locale.value)
+    products.value = (response.products || []).slice(0, 20) // Limit to 20
   } catch (err) {
     console.error('Failed to fetch products:', err)
     error.value = err.message || t('errors.network')
@@ -64,91 +87,26 @@ const fetchProducts = async () => {
   }
 }
 
-// Fetch user profile (to get address) and products on mount
+// Fetch data on mount
 onMounted(async () => {
-  // Ensure we have the latest user profile, including address
-  if (authStore.isLoggedIn) {
-    await authStore.fetchProfile()
-    // Update address form again after fetching profile
-    address.value = {
-      line1: authStore.user?.shipping_address?.line1 || '',
-      city: authStore.user?.shipping_address?.city || '',
-      state: authStore.user?.shipping_address?.state || '',
-      pincode: authStore.user?.shipping_address?.pincode || ''
-    }
-  }
-  await fetchProducts()
+  await Promise.all([fetchSlider(), fetchCategories(), fetchProducts()])
 })
 
-// Refetch products if the user changes the language
-watch(locale, fetchProducts)
+// Refetch categories and products if the user changes the language
+watch(locale, async () => {
+  await Promise.all([fetchCategories(), fetchProducts()])
+})
 
 // --- Methods ---
-const handleRedeemClick = (product) => {
-  error.value = ''
-  successMessage.value = ''
-  
-  // 1. Check if user has an address
-  if (!userAddress.value || !userAddress.value.line1) {
-    showAddressModal.value = true
-    return
-  }
-
-  // 2. Check if user has enough balance
-  if (walletBalance.value < product.redemption_cost) {
-    error.value = t('redeem.insufficientBalance')
-    return
-  }
-  
-  // 3. Show confirmation modal
-  selectedProduct.value = product
-  showConfirmModal.value = true
-}
-
-const confirmRedemption = async () => {
-  if (!selectedProduct.value) return
-
-  placingOrder.value = true
-  error.value = ''
-  successMessage.value = ''
-  
+const addToCart = async (productId, event) => {
+  event.stopPropagation() // Prevent card click
+  addingToCart.value = productId
   try {
-    const response = await redemptionAPI.placeOrder(selectedProduct.value.id, 1)
-    
-    // Update wallet balance from API response
-    walletStore.syncWallet({
-      balance: response.new_wallet_balance,
-      lucky_draw_tickets: walletStore.ticketCount // Preserve existing ticket count
-    })
-    
-    successMessage.value = t('redeem.orderSuccess')
-    showConfirmModal.value = false
-    selectedProduct.value = null
-  } catch (err) {
-    console.error('Failed to place order:', err)
-    error.value = err.message || t('errors.unknown')
+    await cartStore.addToCart(productId, 1)
+  } catch (error) {
+    console.error('Failed to add to cart:', error)
   } finally {
-    placingOrder.value = false
-  }
-}
-
-const handleAddressSubmit = async () => {
-  placingOrder.value = true
-  addressError.value = ''
-  try {
-    // Use the authStore action to update the address
-    const result = await authStore.updateAddress(address.value)
-    
-    if (result.success) {
-      showAddressModal.value = false
-    } else {
-      addressError.value = result.error || t('errors.unknown')
-    }
-  } catch (err) {
-    console.error('Failed to update address:', err)
-    addressError.value = err.message || t('errors.unknown')
-  } finally {
-    placingOrder.value = false
+    addingToCart.value = null
   }
 }
 
@@ -163,6 +121,34 @@ const goToDashboard = () => router.push('/dashboard')
     />
     
     <div class="content">
+      <!-- Slider -->
+      <motion.div
+        v-if="!loadingSlider"
+        class="slider-section"
+        :initial="{ opacity: 0, y: -20 }"
+        :animate="{ opacity: 1, y: 0 }"
+      >
+        <Swiper
+          :slides-per-view="1"
+          :autoplay="{ delay: 3000 }"
+          :loop="true"
+          :pagination="{ clickable: true }"
+          class="slider-swiper"
+        >
+          <SwiperSlide v-for="slide in slider" :key="slide.id">
+            <div class="slide" :style="{ backgroundImage: `url(${slide.images.desktop})` }">
+              <div class="slide-content">
+                <h2>{{ slide.title }}</h2>
+                <p>{{ slide.description }}</p>
+                <a v-if="slide.link" :href="slide.link.url" :target="slide.link.targetBlank ? '_blank' : '_self'" class="slide-cta">
+                  {{ slide.link.ctaText }}
+                </a>
+              </div>
+            </div>
+          </SwiperSlide>
+        </Swiper>
+      </motion.div>
+
       <motion.h1
         class="page-title"
         :initial="{ opacity: 0, y: -20 }"
@@ -179,6 +165,36 @@ const goToDashboard = () => router.push('/dashboard')
       >
         <span class="wallet-label">{{ t('redeem.yourBalance') }}</span>
         <h2 class="wallet-balance">{{ formattedBalance }}</h2>
+      </motion.div>
+
+      <!-- Categories Carousel -->
+      <motion.div
+        v-if="!loadingCategories"
+        class="categories-section"
+        :initial="{ opacity: 0, y: 20 }"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{ delay: 0.2 }"
+      >
+        <h2 class="section-title">{{ t('common.categories') }}</h2>
+        <Swiper
+          :slides-per-view="4"
+          :space-between="16"
+          :loop="false"
+          :breakpoints="{
+            320: { slidesPerView: 2 },
+            640: { slidesPerView: 3 },
+            768: { slidesPerView: 4 }
+          }"
+          class="categories-swiper"
+        >
+          <SwiperSlide v-for="category in categories" :key="category.id">
+            <div class="category-card" @click="router.push('/category/' + category.slug)">
+              <img :src="category.images.thumb.replace('https://offer-api.nirva-naturals.com', '')" :alt="category.name" class="category-image" />
+              <h3 class="category-name">{{ category.name }}</h3>
+              <p class="category-count">{{ category.products_count }} products</p>
+            </div>
+          </SwiperSlide>
+        </Swiper>
       </motion.div>
       
       <AnimatePresence>
@@ -207,7 +223,7 @@ const goToDashboard = () => router.push('/dashboard')
         <p>{{ t('common.loading') }}</p>
       </div>
       
-      <div v-else class="product-list">
+      <div v-else class="product-grid">
         <motion.div
           v-for="(product, index) in products"
           :key="product.id"
@@ -215,31 +231,37 @@ const goToDashboard = () => router.push('/dashboard')
           :initial="{ opacity: 0, y: 20 }"
           :animate="{ opacity: 1, y: 0 }"
           :transition="{ delay: 0.2 + index * 0.05 }"
+          @click="router.push('/product/' + product.id)"
         >
+          <div class="product-image">
+            <img :src="product.images[0]?.medium.replace('https://offer-api.nirva-naturals.com', '')" :alt="product.name" />
+          </div>
           <div class="product-info">
-            <div class="product-icon">🎁</div>
-            <div class="product-details">
-              <h3 class="product-name">{{ product.brand }} - {{ product.name }}</h3>
-              <p class="product-variant">{{ product.variant_name }}</p>
-              <p class="product-description">{{ product.short_description }}</p>
+            <h3 class="product-name">{{ product.brand }} - {{ product.name }}</h3>
+            <p class="product-variant">{{ product.variant_name }}</p>
+            <p class="product-description">{{ product.short_description }}</p>
+            <div class="product-footer">
+              <span class="product-cost">₹{{ product.redemption_cost }}</span>
+              <div class="product-actions">
+                <BaseButton
+                  @click="addToCart(product.id, $event)"
+                  :loading="addingToCart === product.id"
+                  size="small"
+                  variant="secondary"
+                  :disabled="product.stock_quantity === 0"
+                >
+                  {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : t('productDetails.addToCart') }}
+                </BaseButton>
+                <span :class="{ 'out-of-stock': product.stock_quantity === 0 }">
+                  {{ product.stock_quantity === 0 ? '' : `${t('productDetails.stock')}: ${product.stock_quantity}` }}
+                </span>
+              </div>
             </div>
           </div>
-          <div class="product-action">
-            <span class="product-cost">
-              {{ t('redeem.redeemFor') }} <strong>₹{{ product.redemption_cost }}</strong>
-            </span>
-            <BaseButton
-              @click="handleRedeemClick(product)"
-              :disabled="walletBalance < product.redemption_cost || product.stock_quantity === 0"
-              size="small"
-            >
-              {{ product.stock_quantity === 0 ? 'Out of Stock' : 'Redeem' }}
-            </BaseButton>
-          </div>
         </motion.div>
-        
+
         <div v-if="!products.length" class="no-products">
-          <p>There are currently no products available for redemption.</p>
+          <p>{{ t('redeem.title') }}</p>
         </div>
       </div>
       
@@ -248,7 +270,7 @@ const goToDashboard = () => router.push('/dashboard')
         variant="secondary"
         class="back-button"
       >
-        ← Back to Dashboard
+        ← {{ t('dashboard.welcome') }}
       </BaseButton>
     </div>
 
@@ -261,103 +283,10 @@ const goToDashboard = () => router.push('/dashboard')
       @close="showLanguageModal = false"
     />
 
-    <AnimatePresence>
-      <motion.div
-        v-if="showConfirmModal"
-        class="modal-overlay"
-        :initial="{ opacity: 0 }"
-        :animate="{ opacity: 1 }"
-        :exit="{ opacity: 0 }"
-        @click.self="showConfirmModal = false"
-      >
-        <motion.div
-          class="modal-content"
-          :initial="{ scale: 0.9, opacity: 0 }"
-          :animate="{ scale: 1, opacity: 1 }"
-          :exit="{ scale: 0.9, opacity: 0 }"
-        >
-          <h2>{{ t('redeem.confirmRedemption') }}</h2>
-          <p v-if="selectedProduct">
-            Are you sure you want to redeem 
-            <strong>{{ selectedProduct.name }} ({{ selectedProduct.variant_name }})</strong>
-            for <strong>₹{{ selectedProduct.redemption_cost }}</strong>?
-          </p>
-          <div class="modal-actions">
-            <BaseButton 
-              @click="showConfirmModal = false"
-              variant="secondary"
-              :disabled="placingOrder"
-            >
-              {{ t('common.cancel') }}
-            </BaseButton>
-            <BaseButton 
-              @click="confirmRedemption"
-              :loading="placingOrder"
-            >
-              {{ t('redeem.placeOrder') }}
-            </BaseButton>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-    
-    <AnimatePresence>
-      <motion.div
-        v-if="showAddressModal"
-        class="modal-overlay"
-        :initial="{ opacity: 0 }"
-        :animate="{ opacity: 1 }"
-        :exit="{ opacity: 0 }"
-        @click.self="showAddressModal = false"
-      >
-        <motion.div
-          class="modal-content"
-          :initial="{ scale: 0.9, opacity: 0 }"
-          :animate="{ scale: 1, opacity: 1 }"
-          :exit="{ scale: 0.9, opacity: 0 }"
-        >
-          <h2>{{ t('redeem.address') }}</h2>
-          <p>Please enter your shipping address to redeem gifts.</p>
-          <form @submit.prevent="handleAddressSubmit" class="address-form">
-            <BaseInput
-              v-model="address.line1"
-              label="Address Line 1"
-              placeholder="House No, Street Name"
-              required
-            />
-            <BaseInput
-              v-model="address.city"
-              label="City"
-              placeholder="Your City"
-              required
-            />
-            <BaseInput
-              v-model="address.state"
-              label="State"
-              placeholder="Your State"
-              required
-            />
-            <BaseInput
-              v-model="address.pincode"
-              label="Pincode"
-              placeholder="6-digit Pincode"
-              type="tel"
-              maxlength="6"
-              required
-            />
-            <div v-if="addressError" class="error-message">
-              {{ addressError }}
-            </div>
-            <BaseButton 
-              type="submit"
-              :loading="placingOrder"
-            >
-              {{ t('common.save') }}
-            </BaseButton>
-          </form>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+    <FloatingActions
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
 
   </div>
 </template>
@@ -395,7 +324,7 @@ const goToDashboard = () => router.push('/dashboard')
 
 .content {
   flex: 1;
-  max-width: 700px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
   width: 100%;
@@ -435,45 +364,51 @@ const goToDashboard = () => router.push('/dashboard')
   margin: 4px 0 0 0;
 }
 
-.product-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
 }
 
 .product-card {
-  padding: 20px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.product-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.product-image {
+  width: 100%;
+  aspect-ratio: 5/4;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.product-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .product-info {
   display: flex;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-.product-icon {
-  font-size: 36px;
-  background: #f0fdf4;
-  border-radius: 12px;
-  width: 56px;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.product-details {
-  flex: 1;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .product-name {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: #1f2937;
   margin: 0;
+  line-height: 1.3;
 }
 
 .product-variant {
@@ -483,34 +418,39 @@ const goToDashboard = () => router.push('/dashboard')
 }
 
 .product-description {
-  font-size: 14px;
+  font-size: 13px;
   color: #374151;
-  margin-top: 8px;
-  line-height: 1.5;
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.product-action {
+.product-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.product-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid #f3f4f6;
-  padding-top: 16px;
 }
 
 .product-cost {
-  font-size: 15px;
-  color: #6b7280;
-}
-
-.product-cost strong {
   font-size: 18px;
   font-weight: 700;
   color: #10b981;
 }
 
-.product-action .base-button {
-  width: auto;
-  min-width: 100px;
+.out-of-stock {
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .no-products {
@@ -599,5 +539,112 @@ const goToDashboard = () => router.push('/dashboard')
 
 .address-form .error-message {
   margin-top: 0;
+}
+
+/* Slider Styles */
+.slider-section {
+  margin-bottom: 30px;
+}
+
+.slider-swiper {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.slide {
+  position: relative;
+  height: 300px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slide-content {
+  text-align: center;
+  color: white;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 20px;
+  border-radius: 12px;
+  max-width: 400px;
+}
+
+.slide h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+
+.slide p {
+  font-size: 16px;
+  margin: 0 0 16px 0;
+}
+
+.slide-cta {
+  display: inline-block;
+  background: #10b981;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.slide-cta:hover {
+  background: #059669;
+}
+
+/* Categories Styles */
+.categories-section {
+  margin-bottom: 30px;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 16px;
+}
+
+.categories-swiper {
+  border-radius: 12px;
+}
+
+.category-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+  cursor: pointer;
+}
+
+.category-card:hover {
+  transform: translateY(-2px);
+}
+
+.category-image {
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  object-fit: cover;
+  margin-bottom: 8px;
+}
+
+.category-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 4px 0;
+}
+
+.category-count {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
 }
 </style>

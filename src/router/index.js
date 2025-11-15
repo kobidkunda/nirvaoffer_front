@@ -22,6 +22,42 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/product/:id',
+    name: 'product-details',
+    component: () => import('@/views/ProductDetails.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/category/:slug',
+    name: 'category-details',
+    component: () => import('@/views/CategoryDetails.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/orders',
+    name: 'orders',
+    component: () => import('@/views/OrdersPage.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/wallet',
+    name: 'wallet',
+    component: () => import('@/views/WalletPage.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/order/:id',
+    name: 'order-details',
+    component: () => import('@/views/OrderDetailsPage.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/cart',
+    name: 'cart',
+    component: () => import('@/views/CartPage.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/profile',
     name: 'profile',
     component: () => import('@/views/ProfilePage.vue'),

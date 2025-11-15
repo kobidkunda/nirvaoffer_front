@@ -1,14 +1,43 @@
 <!-- src/components/common/GlobalHeader.vue -->
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { motion } from 'motion-v'
 import { useLanguage } from '@/composables/useLanguage'
+import { useAuthStore } from '@/stores/auth'
+import { useCartStore } from '@/stores/cart'
+import { useRouter } from 'vue-router'
 import biolasticLogo from '@/assets/logo/logo_biolastic.png'
 import nirvaLogo from '@/assets/logo/nirva-logo-sq.png'
 
 const emit = defineEmits(['openHelp', 'openLanguage'])
 
 const { t } = useLanguage()
+const authStore = useAuthStore()
+const cartStore = useCartStore()
+const router = useRouter()
+
+const isLoggedIn = computed(() => authStore.isLoggedIn)
+const cartItemCount = computed(() => cartStore.itemCount)
+const showMenu = ref(false)
+
+const goToCart = () => {
+  router.push('/cart')
+}
+
+const toggleMenu = () => {
+  showMenu.value = !showMenu.value
+}
+
+const navigateTo = (route) => {
+  showMenu.value = false
+  router.push(route)
+}
+
+const logout = () => {
+  showMenu.value = false
+  authStore.logout()
+  router.push('/')
+}
 </script>
 
 <template>
@@ -52,40 +81,124 @@ const { t } = useLanguage()
 
       <!-- Action Buttons -->
       <div class="actions">
-        <!-- Language Button -->
-        <motion.button
-          @click="emit('openLanguage')"
-          class="action-btn language-btn"
-          :whileHover="{ scale: 1.1, rotate: 5 }"
-          :whileTap="{ scale: 0.95 }"
-          aria-label="Change Language"
-        >
-          <span class="icon">🌐</span>
-          <span class="label">{{ t('common.language') }}</span>
-        </motion.button>
+        <!-- For Logged-in Users -->
+        <template v-if="isLoggedIn">
+          <!-- Cart Button -->
+          <motion.button
+            @click="goToCart"
+            class="action-btn cart-btn"
+            :whileHover="{ scale: 1.1 }"
+            :whileTap="{ scale: 0.95 }"
+            aria-label="Shopping Cart"
+          >
+            <span class="icon">🛒</span>
+            <span class="label">{{ t('cart.cart') }}</span>
+            <span v-if="cartItemCount > 0" class="cart-badge">{{ cartItemCount }}</span>
+          </motion.button>
 
-        <!-- Help Button (Animated) -->
-        <motion.button
-          @click="emit('openHelp')"
-          class="action-btn help-btn"
-          :animate="{ 
-            scale: [1, 1.1, 1],
-            rotate: [0, -10, 10, 0]
-          }"
-          :transition="{ 
-            duration: 2,
-            repeat: Infinity,
-            repeatDelay: 3
-          }"
-          :whileHover="{ scale: 1.15 }"
-          :whileTap="{ scale: 0.95 }"
-          aria-label="Help"
-        >
-          <span class="icon">❓</span>
-          <span class="label">{{ t('common.help') }}</span>
-          <span class="ping"></span>
-        </motion.button>
+          <!-- Menu Button -->
+          <motion.button
+            @click="toggleMenu"
+            class="action-btn menu-btn"
+            :whileHover="{ scale: 1.1 }"
+            :whileTap="{ scale: 0.95 }"
+            aria-label="Menu"
+          >
+            <span class="icon">☰</span>
+            <span class="label">{{ t('common.menu') }}</span>
+          </motion.button>
+        </template>
+
+        <!-- For Non-logged-in Users -->
+        <template v-else>
+          <!-- Language Button -->
+          <motion.button
+            @click="emit('openLanguage')"
+            class="action-btn language-btn"
+            :whileHover="{ scale: 1.1, rotate: 5 }"
+            :whileTap="{ scale: 0.95 }"
+            aria-label="Change Language"
+          >
+            <span class="icon">🌐</span>
+            <span class="label">{{ t('common.language') }}</span>
+          </motion.button>
+
+          <!-- Help Button (Animated) -->
+          <motion.button
+            @click="emit('openHelp')"
+            class="action-btn help-btn"
+            :animate="{
+              scale: [1, 1.1, 1],
+              rotate: [0, -10, 10, 0]
+            }"
+            :transition="{
+              duration: 2,
+              repeat: Infinity,
+              repeatDelay: 3
+            }"
+            :whileHover="{ scale: 1.15 }"
+            :whileTap="{ scale: 0.95 }"
+            aria-label="Help"
+          >
+            <span class="icon">❓</span>
+            <span class="label">{{ t('common.help') }}</span>
+            <span class="ping"></span>
+          </motion.button>
+        </template>
       </div>
+
+      <!-- Slide-out Menu Portal -->
+      <teleport to="body">
+        <AnimatePresence>
+          <motion.div
+            v-if="showMenu"
+            class="slide-menu-portal"
+            :initial="{ opacity: 0 }"
+            :animate="{ opacity: 1 }"
+            :exit="{ opacity: 0 }"
+            @click.self="showMenu = false"
+          >
+            <motion.div
+              class="menu-content-portal"
+              :initial="{ x: '100%' }"
+              :animate="{ x: 0 }"
+              :exit="{ x: '100%' }"
+              :transition="{ type: 'tween', duration: 0.3 }"
+            >
+              <div class="menu-header">
+                <h3>{{ t('common.menu') }}</h3>
+                <button @click="showMenu = false" class="close-btn">✕</button>
+              </div>
+              <div class="menu-items">
+                <button @click="navigateTo('/profile')" class="menu-item">
+                  <span class="icon">👤</span>
+                  <span>{{ t('profile.title') }}</span>
+                </button>
+                <button @click="navigateTo('/redeem')" class="menu-item">
+                  <span class="icon">🛍️</span>
+                  <span>{{ t('menu.shopNow') }}</span>
+                </button>
+                <button @click="navigateTo('/orders')" class="menu-item">
+                  <span class="icon">📦</span>
+                  <span>{{ t('orders.myOrders') }}</span>
+                </button>
+                <button @click="navigateTo('/wallet')" class="menu-item">
+                  <span class="icon">💰</span>
+                  <span>{{ t('wallet.title') }}</span>
+                </button>
+                <button @click="navigateTo('/scan')" class="menu-item">
+                  <span class="icon">📱</span>
+                  <span>{{ t('menu.redeemCodes') }}</span>
+                </button>
+                <button @click="logout" class="menu-item logout">
+                  <span class="icon">🚪</span>
+                  <span>{{ t('auth.logout') }}</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>
+      </teleport>
     </div>
   </div>
 </template>
@@ -339,6 +452,153 @@ const { t } = useLanguage()
 
 .language-btn .label {
   color: #8b5cf6;
+}
+
+/* Cart Button Effects */
+.cart-btn {
+  border-color: #f59e0b;
+  background: linear-gradient(135deg, #fef3c7 0%, #ffffff 100%);
+  position: relative;
+}
+
+.cart-btn .icon {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.cart-btn .label {
+  color: #f59e0b;
+}
+
+.cart-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #ef4444;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  animation: badge-pulse 2s infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* Menu Button */
+.menu-btn {
+  border-color: #6b7280;
+  background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%);
+}
+
+.menu-btn .icon {
+  color: #374151;
+}
+
+.menu-btn .label {
+  color: #374151;
+}
+
+/* Slide-out Menu Portal */
+.slide-menu-portal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.menu-content-portal {
+  width: 280px;
+  height: 100%;
+  background: white;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 10000;
+}
+
+.menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.menu-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 5px;
+}
+
+.menu-items {
+  flex: 1;
+  padding: 10px 0;
+}
+
+.menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px 20px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 16px;
+  color: #374151;
+}
+
+.menu-item:hover {
+  background: #f9fafb;
+}
+
+.menu-item .icon {
+  font-size: 18px;
+  width: 20px;
+  text-align: center;
+}
+
+.menu-item.logout {
+  color: #dc2626;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 20px;
+}
+
+.menu-item.logout:hover {
+  background: #fef2f2;
 }
 
 /* Hover Effects */

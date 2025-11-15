@@ -13,7 +13,7 @@ export const apiClient = ofetch.create({
   // Request interceptor
   onRequest({ options }) {
     console.log('→ API Request:', options.method, options.baseURL + (options.url || ''))
-    
+
     // Add auth token if exists
     const token = localStorage.getItem('auth_token')
     if (token) {
@@ -23,7 +23,17 @@ export const apiClient = ofetch.create({
         Authorization: `Bearer ${token}`
       }
     }
-    
+
+    // Add CSRF token if exists (for Laravel Sanctum)
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+                     localStorage.getItem('csrf_token')
+    if (csrfToken) {
+      options.headers = {
+        ...options.headers,
+        'X-CSRF-TOKEN': csrfToken
+      }
+    }
+
     // Add default headers
     options.headers = {
       ...options.headers,

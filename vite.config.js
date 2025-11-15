@@ -39,14 +39,15 @@ export default defineConfig({
     // Icon support
     Icons({ autoInstall: true }),
     
-    // PWA Configuration - DISABLED IN DEV
+    // PWA Configuration
     VitePWA({
-      registerType: 'prompt',
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.png', 'apple-touch-icon.png'],
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'robots.txt'],
       manifest: {
         name: 'Nirva Biolastic Loyalty Program',
-        short_name: 'Nirva',
-        description: 'Scan QR codes, earn cashback, redeem rewards',
+        short_name: 'Nirva Loyalty',
+        description: 'Scan QR codes, earn cashback, redeem rewards with Nirva & Biolastic products',
         theme_color: '#10b981',
         background_color: '#ffffff',
         display: 'standalone',
@@ -57,18 +58,28 @@ export default defineConfig({
           {
             src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
+          },
+          {
+            src: 'apple-touch-icon.png',
+            sizes: '180x180',
+            type: 'image/png',
+            purpose: 'any'
           }
         ],
-        categories: ['shopping', 'lifestyle'],
+        categories: ['shopping', 'lifestyle', 'finance'],
         lang: 'en',
-        dir: 'ltr'
+        dir: 'ltr',
+        prefer_related_applications: false,
+        related_applications: [],
+        screenshots: []
       },
       workbox: {
         cleanupOutdatedCaches: true,
@@ -117,7 +128,14 @@ export default defineConfig({
     host: true,
     port: 3000,
     strictPort: false,
-    open: false
+    open: false,
+    proxy: {
+      '/storage': {
+        target: 'https://offer-api.nirva-naturals.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/storage/, '/storage')
+      }
+    }
   },
   
   build: {

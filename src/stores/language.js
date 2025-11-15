@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 
 export const useLanguageStore = defineStore('language', {
   state: () => ({
-    currentLanguage: 'en',
+    currentLanguage: localStorage.getItem('user_language') || 'en',
     availableLanguages: [
       { code: 'en', name: 'English', nativeName: 'English' },
       { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी' },
@@ -28,15 +28,16 @@ export const useLanguageStore = defineStore('language', {
     detectBrowserLanguage() {
       const browserLang = navigator.language.split('-')[0]
       const supported = this.availableLanguages.find(l => l.code === browserLang)
-      
+
       if (supported) {
         this.setLanguage(browserLang)
       }
     }
   },
 
-  persist: {
-    key: 'nirva_language',
-    paths: ['currentLanguage']
-  }
+  // Remove persist to avoid conflicts with manual language loading
+  // persist: {
+  //   key: 'nirva_language',
+  //   paths: ['currentLanguage']
+  // }
 })

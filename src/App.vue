@@ -1,30 +1,23 @@
 <!-- src/App.vue -->
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useLanguageStore } from '@/stores/language'
+import { useLanguage } from '@/composables/useLanguage'
 import { RouterView } from 'vue-router'
 import LanguageModal from '@/components/common/LanguageModal.vue'
 
-const languageStore = useLanguageStore()
+const { changeLanguage } = useLanguage()
 const showLanguageModal = ref(false)
 
 onMounted(() => {
   // Check if user has selected language before
   const hasSelectedLanguage = localStorage.getItem('language_selected')
-  
+
   if (!hasSelectedLanguage) {
     // First visit - show language selection modal
     showLanguageModal.value = true
-  } else {
-    // Returning user - load saved language
-    const savedLanguage = localStorage.getItem('user_language')
-    if (savedLanguage) {
-      languageStore.setLanguage(savedLanguage)
-    } else {
-      // Fallback to browser language detection
-      languageStore.detectBrowserLanguage()
-    }
   }
+  // Note: i18n is already initialized with saved language in main.js
+  // No need to call changeLanguage here to avoid conflicts
 })
 
 const handleLanguageSelect = () => {

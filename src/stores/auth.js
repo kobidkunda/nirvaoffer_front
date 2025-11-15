@@ -55,7 +55,16 @@ export const useAuthStore = defineStore('auth', {
     async updateAddress(address) {
       try {
         const response = await profileAPI.updateAddress(address)
-        this.user.shipping_address = address
+        this.user.shipping_address = {
+          line1: address.line1,
+          city: address.city,
+          state: address.state,
+          pincode: address.pincode
+        }
+        // Update name if provided
+        if (address.name) {
+          this.user.name = address.name
+        }
         return { success: true }
       } catch (error) {
         return { success: false, error: error.message }

@@ -10,7 +10,10 @@
     "error": "त्रुटि",
     "success": "सफलता",
     "help": "सहायता",
-    "language": "भाषा"
+    "language": "भाषा",
+    "categories": "श्रेणियाँ",
+    "back": "वापस",
+    "menu": "मेनू"
   },
   "languageSelect": {
     "title": "अपनी भाषा चुनें",
@@ -25,6 +28,8 @@
     "step2Description": "पैकेट के अंदर या बोतलों पर 12-अंकों का कोड देखें",
     "step3Title": "दर्ज करें और जीतें",
     "step3Description": "तुरंत कैशबैक जीतने और बंपर पुरस्कार जीतने का मौका पाने के लिए अपना कोड दर्ज करें!",
+    "step4Title": "सहायता के लिए",
+    "step4Description": "+91 89279 02193 पर कॉल करें",
     "gotIt": "समझ गया!"
   },
   "scan": {
@@ -48,7 +53,7 @@
     "tickets": "लकी ड्रॉ टिकट",
     "claim": "अपना इनाम क्लेम करें!",
     "scratchHere": "🎁 यहाँ स्क्रैच करें 🎁",
-    "ticketSingle": "+ १ लकी ड्रॉ टिकट",
+    "ticketSingle": "+ 1 लकी ड्रॉ टिकट",
     "ticketPlural": "+ {count} लकी ड्रॉ टिकट",
     "prizeInfo": "माइक्रोवेव, इंडक्शन कुकटॉप और बहुत कुछ जीतने के लिए!"
   },
@@ -71,14 +76,14 @@
     "welcome": "स्वागत है",
     "wallet": "आपका वॉलेट",
     "tickets": "आपके लकी ड्रॉ टिकट",
-    "redeemGifts": "उपहार रिडीম करें",
+    "redeemGifts": "उपहार रिडीम करें",
     "seePrizes": "मासिक पुरस्कार देखें",
     "scanAnother": "एक और कोड स्कैन करें"
   },
   "redeem": {
     "title": "रिवॉर्ड रिडीम करें",
     "yourBalance": "आपका बैलेंस",
-    "insufficientBalance": "अपर्याপ্ত बैलेंस",
+    "insufficientBalance": "अपर्याप्त बैलेंस",
     "selectProduct": "उत्पाद चुनें",
     "confirmRedemption": "रिडेम्पशन की पुष्टि करें",
     "redeemFor": "इसके लिए रिडीम करें",
@@ -95,12 +100,108 @@
     "language": "भाषा",
     "logout": "लॉगआउट"
   },
+  "cart": {
+    "cart": "कार्ट",
+    "empty": "आपकी कार्ट खाली है",
+    "addItems": "शुरू करने के लिए कुछ उत्पाद जोड़ें",
+    "total": "कुल",
+    "checkout": "चेकआउट",
+    "remove": "हटाएं",
+    "quantity": "मात्रा",
+    "price": "कीमत",
+    "subtotal": "उप-योग",
+    "continueShopping": "खरीदारी जारी रखें",
+    "items": "कार्ट आइटम",
+    "clearCart": "कार्ट खाली करें",
+    "totalItems": "कुल आइटम",
+    "totalAmount": "कुल राशि",
+    "walletBalance": "वॉलेट बैलेंस",
+    "amountNeeded": "आवश्यक राशि",
+    "remainingBalance": "शेष राशि",
+    "insufficientFunds": "अपर्याप्त वॉलेट बैलेंस",
+    "confirmCheckout": "चेकआउट की पुष्टि करें",
+    "deliveryNotes": "डिलीवरी नोट्स (वैकल्पिक)",
+    "deliveryNotesPlaceholder": "कोई विशेष डिलीवरी निर्देश...",
+    "confirmOrder": "ऑर्डर की पुष्टि करें",
+    "addressRequired": "शिपिंग पता आवश्यक",
+    "addressRequiredDesc": "अपना शिपिंग पता प्रदान करें",
+    "fullName": "पूरा नाम",
+    "fullNamePlaceholder": "आपका पूरा नाम",
+    "addressLine1": "पता लाइन 1",
+    "addressLine1Placeholder": "घर संख्या, सड़क का नाम",
+    "city": "शहर",
+    "cityPlaceholder": "आपका शहर",
+    "state": "राज्य",
+    "statePlaceholder": "आपका राज्य",
+    "pincode": "पिनकोड",
+    "pincodePlaceholder": "6-अंकों का पिनकोड",
+    "saveAddress": "पता सहेजें और जारी रखें"
+  },
+  "orders": {
+    "title": "मेरे ऑर्डर्स",
+    "empty": "अभी तक कोई आर्डर नहीं",
+    "emptyDesc": "आपने अभी तक कोई आर्डर नहीं दिया है। अपने आर्डर यहाँ देखने के लिए खरीदारी शुरू करें!",
+    "orderNumber": "आर्डर #",
+    "items": "आइटम",
+    "viewDetails": "विवरण देखें",
+    "loading": "आपके आर्डर लोड हो रहे हैं...",
+    "error": "आर्डर लोड करने में विफल"
+  },
+  "orderDetails": {
+    "back": "ऑर्डर्स पर वापस जाएं",
+    "orderInfo": "आर्डर की जानकारी",
+    "orderDate": "आर्डर की तारीख",
+    "status": "स्थिति",
+    "items": "आर्डर आइटम्स",
+    "summary": "आर्डर सारांश",
+    "total": "कुल राशि",
+    "address": "शिपिंग पता",
+    "notes": "आर्डर नोट्स",
+    "tracking": "ट्रैकिंग नंबर"
+  },
+  "wallet": {
+    "title": "मेरा वॉलेट",
+    "currentBalance": "वर्तमान शेष",
+    "transactionHistory": "लेन-देन का इतिहास",
+    "noTransactions": "अभी तक कोई लेन-देन नहीं",
+    "noTransactionsDesc": "आपका लेन-देन का इतिहास यहाँ दिखाई देगा।",
+    "loading": "लेन-देन लोड हो रहे हैं...",
+    "error": "वॉलेट डेटा लोड करने में विफल"
+  },
+  "productDetails": {
+    "back": "उत्पादों पर वापस जाएं",
+    "addToCart": "कार्ट में जोड़ें",
+    "redeemNow": "अभी रिडीम करें",
+    "outOfStock": "स्टॉक में नहीं है",
+    "stock": "स्टॉक",
+    "mrp": "MRP",
+    "redemptionCost": "रिडेम्पशन लागत",
+    "description": "विवरण",
+    "specifications": "विनिर्देश",
+    "reviews": "समीक्षाएं"
+  },
+  "categoryDetails": {
+    "back": "दुकान पर वापस जाएं",
+    "products": "उत्पाद",
+    "noProducts": "इस श्रेणी में कोई उत्पाद उपलब्ध नहीं है।"
+  },
+  "menu": {
+    "myProfile": "मेरी प्रोफाइल",
+    "shopNow": "अभी खरीदें",
+    "myOrders": "मेरे ऑर्डर्स",
+    "wallet": "वॉलेट",
+    "redeemCodes": "कोड रिडीम करें",
+    "logout": "लॉगआउट"
+  },
   "errors": {
     "network": "नेटवर्क त्रुटि। कृपया अपना कनेक्शन जांचें।",
     "rateLimited": "बहुत सारे प्रयास। कृपया बाद में पुनः प्रयास करें।",
     "unknown": "कुछ गलत हो गया। कृपया पुनः प्रयास करें।",
     "cameraPermission": "कैमरे की अनुमति अस्वीकार कर दी गई। कृपया अपनी ब्राउज़र सेटिंग में कैमरे की अनुमति दें।",
     "cameraNotFound": "इस डिवाइस पर कोई कैमरा नहीं मिला।",
-    "cameraError": "कैमरा शुरू नहीं किया जा सका। कृपया पुनः प्रयास करें।"
+    "cameraError": "कैमरा शुरू नहीं किया जा सका। कृपया पुनः प्रयास करें।",
+    "productNotFound": "उत्पाद नहीं मिला।",
+    "categoryNotFound": "श्रेणी नहीं मिली।",
+    "orderNotFound": "आर्डर नहीं मिला।"
   }
 }

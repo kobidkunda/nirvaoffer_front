@@ -10,7 +10,10 @@
     "error": "Error",
     "success": "Success",
     "help": "Help",
-    "language": "Language"
+    "language": "Language",
+    "categories": "Categories",
+    "back": "Back",
+    "menu": "Menu"
   },
   "languageSelect": {
     "title": "Choose Your Language",
@@ -89,20 +92,91 @@
     "orderSuccess": "Order placed successfully!",
     "newBalance": "Your new balance"
   },
-  "profile": {
-    "title": "My Profile",
-    "phone": "Phone Number",
-    "name": "Name",
-    "address": "Shipping Address",
-    "language": "Language",
-    "logout": "Logout"
-  },
-  "errors": {
-    "network": "Network error. Please check your connection.",
-    "rateLimited": "Too many attempts. Please try again later.",
-    "unknown": "Something went wrong. Please try again.",
-    "cameraPermission": "Camera permission denied. Please allow camera access in your browser settings.",
-    "cameraNotFound": "No camera found on this device.",
-    "cameraError": "Could not initialize camera. Please try again."
-  }
+ "profile": {
+   "title": "My Profile",
+   "phone": "Phone Number",
+   "name": "Name",
+   "address": "Shipping Address",
+   "language": "Language",
+   "logout": "Logout"
+ },
+ "cart": {
+   "cart": "Cart",
+   "empty": "Your cart is empty",
+   "addItems": "Add some products to get started",
+   "total": "Total",
+   "checkout": "Checkout",
+   "remove": "Remove",
+   "quantity": "Quantity",
+   "price": "Price",
+   "subtotal": "Subtotal",
+   "continueShopping": "Continue Shopping"
+ },
+ "orders": {
+   "title": "My Orders",
+   "empty": "No Orders Yet",
+   "emptyDesc": "You haven't placed any orders yet. Start shopping to see your orders here!",
+   "orderNumber": "Order #",
+   "items": "item(s)",
+   "viewDetails": "View Details",
+   "loading": "Loading your orders...",
+   "error": "Failed to load orders"
+ },
+ "orderDetails": {
+   "back": "Back to Orders",
+   "orderInfo": "Order Information",
+   "orderDate": "Order Date",
+   "status": "Status",
+   "items": "Order Items",
+   "summary": "Order Summary",
+   "total": "Total Amount",
+   "address": "Shipping Address",
+   "notes": "Order Notes",
+   "tracking": "Tracking Number"
+ },
+ "wallet": {
+   "title": "My Wallet",
+   "currentBalance": "Current Balance",
+   "transactionHistory": "Transaction History",
+   "noTransactions": "No Transactions Yet",
+   "noTransactionsDesc": "Your transaction history will appear here.",
+   "loading": "Loading transactions...",
+   "error": "Failed to load wallet data"
+ },
+ "productDetails": {
+   "back": "Back to Products",
+   "addToCart": "Add to Cart",
+   "redeemNow": "Redeem Now",
+   "outOfStock": "Out of Stock",
+   "stock": "Stock",
+   "mrp": "MRP",
+   "redemptionCost": "Redemption Cost",
+   "description": "Description",
+   "specifications": "Specifications",
+   "reviews": "Reviews"
+ },
+ "categoryDetails": {
+   "back": "Back to Shop",
+   "products": "Products",
+   "noProducts": "No products available in this category."
+ },
+ "menu": {
+   "myProfile": "My Profile",
+   "shopNow": "Shop Now",
+   "myOrders": "My Orders",
+   "wallet": "Wallet",
+   "redeemCodes": "Redeem Codes",
+   "logout": "Logout"
+ },
+ "errors": {
+   "network": "Network error. Please check your connection.",
+   "rateLimited": "Too many attempts. Please try again later.",
+   "unknown": "Something went wrong. Please try again.",
+   "cameraPermission": "Camera permission denied. Please allow camera access in your browser settings.",
+   "cameraNotFound": "No camera found on this device.",
+   "cameraError": "Could not initialize camera. Please try again.",
+   "productNotFound": "Product not found.",
+   "categoryNotFound": "Category not found.",
+   "orderNotFound": "Order not found."
+ }
 }

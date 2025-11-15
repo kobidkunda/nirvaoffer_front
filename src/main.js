@@ -14,9 +14,10 @@ import bn from './locales/bn.json'
 console.log('Starting app initialization...')
 
 // Create i18n instance
+const savedLanguage = localStorage.getItem('user_language')
 const i18n = createI18n({
   legacy: false,
-  locale: localStorage.getItem('user_language') || 'en',
+  locale: savedLanguage || 'en', // Initialize with saved language
   fallbackLocale: 'en',
   messages: { en, hi, bn },
   globalInjection: true
