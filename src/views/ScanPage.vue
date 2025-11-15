@@ -201,12 +201,12 @@ const claimReward = async () => {
 
 // Help methods
 const callHelp = () => {
-  window.location.href = 'tel:+918927902193'
+  window.location.href = 'tel:'+t('common.phone')
 }
 
 const whatsappHelp = () => {
   const message = 'Hello, I need help with the Nirva Loyalty Program.'
-  const whatsappUrl = `https://wa.me/918927902193?text=${encodeURIComponent(message)}`
+  const whatsappUrl = 'https://wa.me/'+t('common.phone')+'?text='+encodeURIComponent(message)
   window.open(whatsappUrl, '_blank')
 }
 </script>
