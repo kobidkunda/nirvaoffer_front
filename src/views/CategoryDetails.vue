@@ -50,7 +50,13 @@ const fetchCategory = async () => {
     category.value = response.category || response
   } catch (err) {
     console.error('Failed to fetch category:', err)
-    error.value = err.message || t('errors.network')
+    // Check if error response contains category data (API returns 404 but includes data)
+    if (err.response?.data?.category) {
+      category.value = err.response.data.category
+      error.value = '' // Clear error since we have data
+    } else {
+      error.value = err.message || t('errors.network')
+    }
   } finally {
     loadingCategory.value = false
   }
