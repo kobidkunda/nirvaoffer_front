@@ -70,7 +70,8 @@
     "changeNumber": "Change Number",
     "enterName": "What's your name?",
     "nameLabel": "Your Name",
-    "namePlaceholder": "Enter your name"
+    "namePlaceholder": "Enter your name",
+    "logout" : "Logout"
   },
   "dashboard": {
     "welcome": "Welcome",
@@ -120,7 +121,8 @@
    "items": "item(s)",
    "viewDetails": "View Details",
    "loading": "Loading your orders...",
-   "error": "Failed to load orders"
+   "error": "Failed to load orders",
+   "myOrders" : "My Orders"
  },
  "orderDetails": {
    "back": "Back to Orders",
