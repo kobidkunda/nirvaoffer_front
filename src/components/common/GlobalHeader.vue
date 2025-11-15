@@ -38,6 +38,24 @@ const logout = () => {
   authStore.logout()
   router.push('/')
 }
+
+const openLanguageAndCloseMenu = () => {
+  showMenu.value = false
+  emit('openLanguage')
+}
+
+const openHelpAndCloseMenu = () => {
+  showMenu.value = false
+  emit('openHelp')
+}
+
+const goToHome = () => {
+  if (isLoggedIn.value) {
+    router.push('/dashboard')
+  } else {
+    router.push('/')
+  }
+}
 </script>
 
 <template>
@@ -59,25 +77,25 @@ const logout = () => {
     <!-- Content -->
     <div class="header-content">
       <!-- Dual Logo Section -->
-      <div class="logos">
-        <motion.img 
-          :src="biolasticLogo" 
-          alt="Biolastic"
-          class="logo biolastic-logo"
-          :initial="{ opacity: 0, x: -20 }"
-          :animate="{ opacity: 1, x: 0 }"
-          :transition="{ duration: 0.6 }"
-        />
-        <span class="logo-divider">&</span>
-        <motion.img 
-          :src="nirvaLogo" 
-          alt="Nirva"
-          class="logo nirva-logo"
-          :initial="{ opacity: 0, x: 20 }"
-          :animate="{ opacity: 1, x: 0 }"
-          :transition="{ duration: 0.6 }"
-        />
-      </div>
+       <div class="logos" @click="goToHome" role="button" tabindex="0" @keydown.enter="goToHome">
+         <motion.img
+           :src="biolasticLogo"
+           alt="Biolastic"
+           class="logo biolastic-logo"
+           :initial="{ opacity: 0, x: -20 }"
+           :animate="{ opacity: 1, x: 0 }"
+           :transition="{ duration: 0.6 }"
+         />
+         <span class="logo-divider">&</span>
+         <motion.img
+           :src="nirvaLogo"
+           alt="Nirva"
+           class="logo nirva-logo"
+           :initial="{ opacity: 0, x: 20 }"
+           :animate="{ opacity: 1, x: 0 }"
+           :transition="{ duration: 0.6 }"
+         />
+       </div>
 
       <!-- Action Buttons -->
       <div class="actions">
@@ -186,9 +204,17 @@ const logout = () => {
                   <span class="icon">💰</span>
                   <span>{{ t('wallet.title') }}</span>
                 </button>
-                <button @click="navigateTo('/scan')" class="menu-item">
+                <button @click="navigateTo('/scan')" class="menu-item redeem-highlight">
                   <span class="icon">📱</span>
                   <span>{{ t('menu.redeemCodes') }}</span>
+                </button>
+                <button @click="openLanguageAndCloseMenu" class="menu-item">
+                  <span class="icon">🌐</span>
+                  <span>{{ t('common.language') }}</span>
+                </button>
+                <button @click="openHelpAndCloseMenu" class="menu-item">
+                  <span class="icon">❓</span>
+                  <span>{{ t('common.help') }}</span>
                 </button>
                 <button @click="logout" class="menu-item logout">
                   <span class="icon">🚪</span>
@@ -329,6 +355,12 @@ const logout = () => {
   display: flex;
   align-items: center;
   gap: 12px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.logos:hover {
+  opacity: 0.8;
 }
 
 .logo {
@@ -599,6 +631,16 @@ const logout = () => {
 
 .menu-item.logout:hover {
   background: #fef2f2;
+}
+
+.menu-item.redeem-highlight {
+  background: linear-gradient(135deg, #fef3c7 0%, #ffffff 100%);
+  border-left: 4px solid #f59e0b;
+  font-weight: 600;
+}
+
+.menu-item.redeem-highlight:hover {
+  background: linear-gradient(135deg, #fde68a 0%, #fef3c7 100%);
 }
 
 /* Hover Effects */

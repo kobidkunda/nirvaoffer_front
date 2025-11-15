@@ -3,10 +3,20 @@
 import { ref, onMounted } from 'vue'
 import { useLanguage } from '@/composables/useLanguage'
 import { RouterView } from 'vue-router'
+import { setToastContainer } from '@/composables/useToast'
 import LanguageModal from '@/components/common/LanguageModal.vue'
+import ToastContainer from '@/components/common/ToastContainer.vue'
 
 const { changeLanguage } = useLanguage()
 const showLanguageModal = ref(false)
+const toastContainerRef = ref(null)
+
+// Set up toast container for global use
+onMounted(() => {
+  if (toastContainerRef.value) {
+    setToastContainer(toastContainerRef.value)
+  }
+})
 
 onMounted(() => {
   // Check if user has selected language before
@@ -28,7 +38,7 @@ const handleLanguageSelect = () => {
 <template>
   <div id="app">
     <!-- First Visit Language Selection -->
-    <LanguageModal 
+    <LanguageModal
       :show="showLanguageModal"
       :is-first-visit="true"
       @select="handleLanguageSelect"
@@ -37,6 +47,9 @@ const handleLanguageSelect = () => {
 
     <!-- Main App Content -->
     <RouterView />
+
+    <!-- Toast Notifications -->
+    <ToastContainer ref="toastContainerRef" />
   </div>
 </template>
 

@@ -7,6 +7,7 @@ import { motion } from 'motion-v'
 // 'useAuthStore', 'useWalletStore', and 'useLanguage' are
 // auto-imported by 'unplugin-auto-import' (see vite.config.js)
 import { shopAPI } from '@/api/endpoints'
+import { useToast } from '@/composables/useToast'
 import { useCartStore } from '@/stores/cart'
 
 // Import Common Components
@@ -22,6 +23,7 @@ const authStore = useAuthStore() // This now works globally
 const walletStore = useWalletStore() // This now works globally
 const cartStore = useCartStore()
 const { t, locale } = useLanguage() // This now works globally
+const toast = useToast()
 
 // --- Page State ---
 const loadingCategory = ref(true)
@@ -62,15 +64,17 @@ watch(locale, fetchCategory)
 const addToCart = async (productId, event) => {
   event.stopPropagation() // Prevent card click
   addingToCart.value = productId
+
   try {
     await cartStore.addToCart(productId, 1)
+    toast.showSuccess(t('cart.addedToCart'))
   } catch (error) {
     console.error('Failed to add to cart:', error)
+    toast.showError(t('cart.addToCartError'))
   } finally {
     addingToCart.value = null
   }
 }
-
 const goBack = () => router.back()
 </script>
 

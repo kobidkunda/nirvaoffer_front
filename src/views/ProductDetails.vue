@@ -10,6 +10,7 @@ import 'swiper/css'
 // auto-imported by 'unplugin-auto-import' (see vite.config.js)
 import { shopAPI, redemptionAPI } from '@/api/endpoints'
 import { useCartStore } from '@/stores/cart'
+import { useToast } from '@/composables/useToast'
 
 // Import Common Components
 import GlobalHeader from '@/components/common/GlobalHeader.vue'
@@ -25,6 +26,7 @@ const authStore = useAuthStore() // This now works globally
 const walletStore = useWalletStore() // This now works globally
 const cartStore = useCartStore()
 const { t, locale } = useLanguage() // This now works globally
+const toast = useToast()
 
 // --- Page State ---
 const loadingProduct = ref(true)
@@ -145,10 +147,10 @@ const addToCart = async () => {
   addingToCart.value = true
   try {
     await cartStore.addToCart(product.value.id, 1)
-    successMessage.value = t('cart.addedToCart')
+    toast.showSuccess(t('cart.addedToCart'))
   } catch (error) {
     console.error('Failed to add to cart:', error)
-    error.value = error.message || t('errors.unknown')
+    toast.showError(t('cart.addToCartError'))
   } finally {
     addingToCart.value = false
   }

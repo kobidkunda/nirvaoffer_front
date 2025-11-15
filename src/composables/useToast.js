@@ -1,13 +1,13 @@
 // src/composables/useToast.js
-import { inject } from 'vue'
+let toastContainer = null
 
-const TOAST_KEY = Symbol('toast')
+export function setToastContainer(container) {
+  toastContainer = container
+}
 
 export function useToast() {
-  const toastContainer = inject(TOAST_KEY)
-
   const showToast = (message, type = 'success', duration = 3000) => {
-    if (toastContainer) {
+    if (toastContainer && toastContainer.showToast) {
       toastContainer.showToast(message, type, duration)
     } else {
       console.warn('Toast container not found. Make sure ToastContainer is properly set up in App.vue')
@@ -31,12 +31,5 @@ export function useToast() {
     showSuccess,
     showError,
     showInfo
-  }
-}
-
-// Provide function for App.vue
-export function provideToast(toastContainerRef) {
-  return {
-    [TOAST_KEY]: toastContainerRef
   }
 }

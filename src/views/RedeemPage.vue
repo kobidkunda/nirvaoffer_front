@@ -9,6 +9,7 @@ import { useCartStore } from '@/stores/cart'
 import { motion, AnimatePresence } from 'motion-v'
 import { Swiper, SwiperSlide } from 'swiper/vue'
 import 'swiper/css'
+import { useToast } from '@/composables/useToast'
 
 // Import Common Components
 import GlobalHeader from '@/components/common/GlobalHeader.vue'
@@ -24,6 +25,7 @@ const authStore = useAuthStore() // This now works globally
 const walletStore = useWalletStore() // This now works globally
 const cartStore = useCartStore()
 const { t, locale } = useLanguage() // This now works globally
+const toast = useToast()
 
 // --- Page State ---
 const loadingSlider = ref(true)
@@ -101,15 +103,17 @@ watch(locale, async () => {
 const addToCart = async (productId, event) => {
   event.stopPropagation() // Prevent card click
   addingToCart.value = productId
+
   try {
     await cartStore.addToCart(productId, 1)
+    toast.showSuccess(t('cart.addedToCart'))
   } catch (error) {
     console.error('Failed to add to cart:', error)
+    toast.showError(t('cart.addToCartError'))
   } finally {
     addingToCart.value = null
   }
 }
-
 const goToDashboard = () => router.push('/dashboard')
 </script>
 

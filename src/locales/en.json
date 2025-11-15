@@ -111,7 +111,9 @@
    "quantity": "Quantity",
    "price": "Price",
    "subtotal": "Subtotal",
-   "continueShopping": "Continue Shopping"
+   "continueShopping": "Continue Shopping",
+   "addedToCart": "Product added to cart successfully!",
+   "addToCartError": "Failed to add product to cart"
  },
  "orders": {
    "title": "My Orders",

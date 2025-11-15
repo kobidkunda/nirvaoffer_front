@@ -111,6 +111,8 @@
     "price": "মূল্য",
     "subtotal": "উপমোট",
     "continueShopping": "কেনাকাটা চালিয়ে যান",
+    "addedToCart": "পণ্য সফলভাবে কার্টে যোগ করা হয়েছে!",
+    "addToCartError": "পণ্য কার্টে যোগ করতে ব্যর্থ",
     "items": "কার্ট আইটেম",
     "clearCart": "কার্ট খালি করুন",
     "totalItems": "মোট আইটেম",
