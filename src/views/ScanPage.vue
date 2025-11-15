@@ -1,25 +1,25 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWalletStore } from '@/stores/wallet'
 import { useAuthStore } from '@/stores/auth'
 import { useLanguage } from '@/composables/useLanguage'
 import { rewardAPI } from '@/api/endpoints'
 import { motion } from 'motion-v'
-import { Swiper, SwiperSlide } from 'swiper/vue'
-import { Autoplay, EffectCoverflow } from 'swiper/modules'
-import 'swiper/css'
-import 'swiper/css/effect-coverflow'
 import GlobalHeader from '@/components/common/GlobalHeader.vue'
 import HelpModal from '@/components/common/HelpModal.vue'
 import LanguageModal from '@/components/common/LanguageModal.vue'
 import ScratchCard from '@/components/reward/ScratchCard.vue'
 import OTPModal from '@/components/common/OTPModal.vue'
-import BaseButton from '@/components/common/BaseButton.vue'
-import BaseInput from '@/components/common/BaseInput.vue'
 
-// *** FIXED: Import QR Scanner ***
-import { QrcodeStream } from 'vue-qrcode-reader'
+// Import new scan components
+import PrizeBadge from '@/components/scan/PrizeBadge.vue'
+import GiftCarousel from '@/components/scan/GiftCarousel.vue'
+import ExcitementChips from '@/components/scan/ExcitementChips.vue'
+import ScanForm from '@/components/scan/ScanForm.vue'
+import WinnerShowcase from '@/components/scan/WinnerShowcase.vue'
+import QRScannerModal from '@/components/scan/QRScannerModal.vue'
+import SliderComponent from '@/components/common/SliderComponent.vue'
 
 const router = useRouter()
 const walletStore = useWalletStore()
@@ -40,26 +40,9 @@ const gifts = ref([])
 
 // *** FIXED: Refs for QR Scanner ***
 const showScanner = ref(false)
-const scannerError = ref('')
-const cameraReady = ref(false)
 
 // *** FIX: Add local ref to keep reward visible during navigation ***
 const localPendingReward = ref(null)
-
-// Swiper modules
-const modules = [Autoplay, EffectCoverflow]
-
-// *** FIXED: Add barcode formats (explicitly set QR code) ***
-const barcodeFormats = ref(['qr_code'])
-
-// *** FIXED: Enhanced camera constraints with autofocus ***
-const cameraConstraints = computed(() => ({
-  facingMode: 'environment',
-  advanced: [
-    { focusMode: 'continuous' },
-    { zoom: 1.0 }
-  ]
-}))
 
 // Fetch gift slider data
 const fetchGifts = async () => {
@@ -79,24 +62,21 @@ onMounted(() => {
 // *** FIXED: Function to open scanner ***
 const openScanner = () => {
   error.value = ''
-  scannerError.value = ''
-  cameraReady.value = false
   showScanner.value = true
 }
 
 // *** FIXED: Function to close scanner ***
 const closeScanner = () => {
   showScanner.value = false
-  cameraReady.value = false
 }
 
-// *** FIXED: Handle successful QR detection (changed from onDecode to onDetect) ***
+// *** FIXED: Handle successful QR detection ***
 const onDetect = (detectedCodes) => {
   if (detectedCodes && detectedCodes.length > 0) {
     const decodedString = detectedCodes[0].rawValue
     console.log('QR detected:', decodedString)
     closeScanner()
-    
+
     if (decodedString && /^[A-Z0-9]{12}$/i.test(decodedString)) {
       scannedCode.value = decodedString.toUpperCase()
       validateCode() // Auto-submit on valid scan
@@ -105,91 +85,6 @@ const onDetect = (detectedCodes) => {
       scannedCode.value = decodedString // Show it to the user
       error.value = t('scan.invalid') // Show invalid error
     }
-  }
-}
-
-// *** FIXED: Handle camera initialization and permissions ***
-const onScannerInit = async (promise) => {
-  scannerError.value = ''
-  try {
-    const { capabilities } = await promise
-    console.log('Camera initialized successfully', capabilities)
-    cameraReady.value = true
-    
-    // *** FIXED: Apply video constraints after camera is ready for better focus ***
-    if (capabilities) {
-      try {
-        // Additional focus optimization for mobile devices
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            focusMode: 'continuous',
-            zoom: true
-          }
-        })
-        console.log('Enhanced constraints applied')
-      } catch (constraintErr) {
-        console.warn('Could not apply enhanced constraints:', constraintErr)
-      }
-    }
-  } catch (err) {
-    console.error('Camera init error:', err)
-    cameraReady.value = false
-    
-    if (err.name === 'NotAllowedError') {
-      scannerError.value = t('errors.cameraPermission') || 'Camera permission denied. Please allow camera access.'
-    } else if (err.name === 'NotFoundError') {
-      scannerError.value = t('errors.cameraNotFound') || 'No camera found on this device.'
-    } else if (err.name === 'NotSupportedError') {
-      scannerError.value = 'Secure context required (HTTPS or localhost).'
-    } else if (err.name === 'NotReadableError') {
-      scannerError.value = 'Camera already in use by another application.'
-    } else if (err.name === 'OverconstrainedError') {
-      scannerError.value = 'Camera does not meet requirements.'
-    } else if (err.name === 'StreamApiNotSupportedError') {
-      scannerError.value = 'Camera API not supported in this browser.'
-    } else if (err.name === 'InsecureContextError') {
-      scannerError.value = 'Camera access only allowed on HTTPS or localhost.'
-    } else {
-      scannerError.value = t('errors.cameraError') || err.message || 'Camera error occurred.'
-    }
-  }
-}
-
-// *** FIXED: Handle scanner errors ***
-const onScannerError = (err) => {
-  console.error('Scanner error:', err)
-  scannerError.value = err.message || 'Scanner error occurred'
-}
-
-// *** FIXED: Camera ready handler ***
-const onCameraReady = () => {
-  console.log('Camera stream is ready')
-  cameraReady.value = true
-  scannerError.value = ''
-}
-
-// *** FIXED: Track function for visual feedback (helps with detection) ***
-const paintOutline = (detectedCodes, ctx) => {
-  for (const detectedCode of detectedCodes) {
-    const [firstPoint, ...otherPoints] = detectedCode.cornerPoints
-    
-    ctx.strokeStyle = '#10b981'
-    ctx.lineWidth = 4
-    ctx.beginPath()
-    ctx.moveTo(firstPoint.x, firstPoint.y)
-    
-    for (const { x, y } of otherPoints) {
-      ctx.lineTo(x, y)
-    }
-    
-    ctx.lineTo(firstPoint.x, firstPoint.y)
-    ctx.closePath()
-    ctx.stroke()
-    
-    // Add a green fill with transparency
-    ctx.fillStyle = 'rgba(16, 185, 129, 0.2)'
-    ctx.fill()
   }
 }
 
@@ -206,11 +101,11 @@ const validateCode = async () => {
   loading.value = true
 try {
     const response = await rewardAPI.validateCode(scannedCode.value)
-    
+
     // *** FIX: Set both store and local reward ***
     walletStore.setPendingReward(response)
     localPendingReward.value = response
-    
+
     step.value = 'scratch'
   } catch (err) {
     // *** START OF FIX ***
@@ -253,7 +148,7 @@ const handleLoginClick = () => {
 
 const handleOTPSuccess = async ({ phoneNumber, otpCode }) => {
   loading.value = true
-  otpError.value = '' 
+  otpError.value = ''
   error.value = ''
   try {
     const result = await authStore.loginWithOTP(phoneNumber, otpCode)
@@ -297,6 +192,17 @@ const claimReward = async () => {
     loading.value = false
   }
 }
+
+// Help methods
+const callHelp = () => {
+  window.location.href = 'tel:+918927902193'
+}
+
+const whatsappHelp = () => {
+  const message = 'Hello, I need help with the Nirva Loyalty Program.'
+  const whatsappUrl = `https://wa.me/918927902193?text=${encodeURIComponent(message)}`
+  window.open(whatsappUrl, '_blank')
+}
 </script>
 
 <template>
@@ -305,7 +211,7 @@ const claimReward = async () => {
       <div class="gradient-orb orb-1"></div>
       <div class="gradient-orb orb-2"></div>
       <div class="gradient-orb orb-3"></div>
-      
+
       <div class="float-item money-1">💵</div>
       <div class="float-item money-2">💰</div>
       <div class="float-item money-3">💸</div>
@@ -318,7 +224,7 @@ const claimReward = async () => {
       <div class="float-item star-2">✨</div>
       <div class="float-item trophy-1">🥇</div>
       <div class="float-item prize-1">🎊</div>
-      
+
       <div class="bounce-item item-1">💵</div>
       <div class="bounce-item item-2">🎁</div>
       <div class="bounce-item item-3">💰</div>
@@ -327,182 +233,33 @@ const claimReward = async () => {
       <div class="bounce-item item-6">🎟️</div>
     </div>
 
-    <GlobalHeader 
+    <GlobalHeader
       @open-help="showHelpModal = true"
       @open-language="showLanguageModal = true"
     />
 
     <div class="page-content">
       <div v-if="step === 'scan'" class="scan-container">
-        <motion.div 
-          class="prize-badge"
-          :animate="{ 
-            scale: [1, 1.1, 1],
-            rotate: [0, -5, 5, 0]
-          }"
-          :transition="{ 
-            duration: 2,
-            repeat: Infinity,
-            repeatDelay: 1
-          }"
-        >
-          <div class="badge-shine"></div>
-          <span class="badge-text">🎊 WIN AMAZING PRIZES! 🎊</span>
-        </motion.div>
+        <PrizeBadge />
 
-        <motion.div 
-          class="carousel-section"
-          :initial="{ opacity: 0, y: 20 }"
-          :animate="{ opacity: 1, y: 0 }"
-          :transition="{ duration: 0.6 }"
-        >
-          <Swiper
-            :modules="modules"
-            :slides-per-view="4"
-            :space-between="15"
-            :loop="true"
-            :autoplay="{
-              delay: 2000,
-              disableOnInteraction: false,
-            }"
-            :speed="1000"
-            :breakpoints="{
-              320: { slidesPerView: 2, spaceBetween: 10 },
-              480: { slidesPerView: 3, spaceBetween: 12 },
-              640: { slidesPerView: 4, spaceBetween: 15 }
-            }"
-            class="gifts-swiper"
-          >
-            <SwiperSlide v-for="gift in gifts" :key="gift.id">
-              <motion.div 
-                class="gift-card"
-                :whileHover="{ scale: 1.05, y: -5 }"
-              >
-                <img :src="gift.image" :alt="gift.name" class="gift-image" />
-                <div class="gift-name">{{ gift.name }}</div>
-              </motion.div>
-            </SwiperSlide>
-          </Swiper>
-        </motion.div>
+        <GiftCarousel :gifts="gifts" />
 
-        <motion.div 
-          class="excitement-chips"
-          :initial="{ opacity: 0 }"
-          :animate="{ opacity: 1 }"
-          :transition="{ delay: 0.3 }"
-        >
-          <motion.div 
-            class="chip"
-            :animate="{ scale: [1, 1.05, 1] }"
-            :transition="{ duration: 1.5, repeat: Infinity, delay: 0 }"
-          >
-            💵 Instant Cash
-          </motion.div>
-          <motion.div 
-            class="chip"
-            :animate="{ scale: [1, 1.05, 1] }"
-            :transition="{ duration: 1.5, repeat: Infinity, delay: 0.3 }"
-          >
-            🎁 Free Gifts
-          </motion.div>
-          <motion.div 
-            class="chip"
-            :animate="{ scale: [1, 1.05, 1] }"
-            :transition="{ duration: 1.5, repeat: Infinity, delay: 0.6 }"
-          >
-            🏆 Big Prizes
-          </motion.div>
-        </motion.div>
-        
-        <motion.div 
-          class="form-container"
-          :initial="{ opacity: 0, scale: 0.95 }"
-          :animate="{ opacity: 1, scale: 1 }"
-          :transition="{ duration: 0.6, delay: 0.4 }"
-        >
-          <div class="form-glow"></div>
-          
-          <motion.button
-            class="scan-qr-button"
-            @click="openScanner"
-            :whileHover="{ scale: 1.02, backgroundColor: '#f0fdf4' }"
-            :whileTap="{ scale: 0.98 }"
-          >
-            <span class="scan-icon">📷</span>
-            <strong>{{ t('scan.scanButton') }}</strong>
-          </motion.button>
-          
-          <div class="divider or-divider">
-            <span>{{ t('scan.orEnterCode') }}</span>
-          </div>
-          
-          <input v-model="honeypot" type="text" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off" />
-          
-          <div class="input-wrapper">
-            <BaseInput
-              v-model="scannedCode"
-              type="text"
-              :placeholder="t('scan.placeholder')"
-              maxlength="12"
-              :error="error"
-              style="text-transform: uppercase"
-            />
-          </div>
-          
-          <motion.div
-            :whileHover="{ scale: 1.02 }"
-            :whileTap="{ scale: 0.98 }"
-          >
-            <BaseButton 
-              @click="validateCode"
-              :loading="loading"
-              :disabled="scannedCode.length !== 12"
-              class="check-button"
-            >
-              <span v-if="!loading" class="button-content">
-                <span class="button-icon">🎯</span>
-                {{ t('scan.submit') }}
-                <span class="button-shine"></span>
-              </span>
-            </BaseButton>
-          </motion.div>
-          
-          <div class="divider">
-            <span>{{ t('scan.loginPrompt') }}</span>
-          </div>
-          
-          <motion.button 
-            class="login-link"
-            @click="handleLoginClick"
-            :whileHover="{ scale: 1.02, backgroundColor: '#f0fdf4' }"
-            :whileTap="{ scale: 0.98 }"
-          >
-            <span class="login-icon">👤</span>
-            <strong>{{ t('scan.loginButton') }}</strong>
-          </motion.button>
-        </motion.div>
+        <ExcitementChips />
 
-        <motion.div 
-          class="winner-showcase"
-          :initial="{ opacity: 0, y: 20 }"
-          :animate="{ opacity: 1, y: 0 }"
-          :transition="{ delay: 0.6 }"
-        >
-          <div class="winner-badge">🏅 Recent Winners</div>
-          <div class="winners-scroll">
-            <motion.div 
-              class="winner-item"
-              :animate="{ x: [-300, 0] }"
-              :transition="{ duration: 20, repeat: Infinity, ease: 'linear' }"
-            >
-              <span>Raj K. won <strong>₹500</strong> 💰</span>
-              <span>Priya S. won <strong>Mixer</strong> 🥤</span>
-              <span>Amit P. won <strong>₹1000</strong> 💵</span>
-            </motion.div>
-          </div>
-        </motion.div>
+        <ScanForm
+          :scanned-code="scannedCode"
+          :error="error"
+          :loading="loading"
+          :login-button-text="authStore.isLoggedIn ? 'Shop Now' : ''"
+          @update:scanned-code="scannedCode = $event"
+          @scan-qr="openScanner"
+          @validate-code="validateCode"
+          @login-click="handleLoginClick"
+        />
+
+        <WinnerShowcase />
       </div>
-      
+
       <div v-if="step === 'scratch'" class="scratch-container">
         <ScratchCard
            v-if="localPendingReward"
@@ -514,68 +271,42 @@ const claimReward = async () => {
         <p v-if="error" class="error-text">{{ error }}</p>
       </div>
     </div>
-    
-    <OTPModal 
+
+    <OTPModal
       :show="showOTPModal"
-      :error="otpError" 
-      @close="showOTPModal = false; otpError = ''" 
+      :error="otpError"
+      @close="showOTPModal = false; otpError = ''"
       @success="handleOTPSuccess"
     />
     <HelpModal :show="showHelpModal" @close="showHelpModal = false" />
     <LanguageModal :show="showLanguageModal" @close="showLanguageModal = false" />
-    
+
     <div v-if="loading && !showOTPModal" class="loading-overlay">
       <div class="spinner-ring"></div>
       <p>{{ t('common.loading') }}</p>
     </div>
 
-    <!-- *** FIXED: QR Scanner Modal with all enhancements *** -->
-    <div v-if="showScanner" class="scanner-modal">
-      <QrcodeStream
-        @detect="onDetect"
-        @init="onScannerInit"
-        @error="onScannerError"
-        @camera-on="onCameraReady"
-        :constraints="cameraConstraints"
-        :formats="barcodeFormats"
-        :track="paintOutline"
-        class="scanner-video"
-      />
-      
-      <button @click="closeScanner" class="close-scanner-btn" aria-label="Close scanner">
-        ✕
-      </button>
-      
-      <div class="scanner-overlay-content">
-        <div class="scanner-box">
-          <div class="scanner-corners">
-            <div class="corner corner-tl"></div>
-            <div class="corner corner-tr"></div>
-            <div class="corner corner-bl"></div>
-            <div class="corner corner-br"></div>
-          </div>
-          <div class="scanner-line"></div>
-        </div>
-        
-        <div class="scanner-instructions">
-          <p v-if="!cameraReady" class="scanner-text loading-text">
-            {{ t('scan.initializingCamera') || 'Initializing camera...' }}
-          </p>
-          <p v-else class="scanner-text">
-            {{ t('scan.scannerPrompt') || 'Position QR code within the frame' }}
-          </p>
-        </div>
-        
-        <div v-if="scannerError" class="scanner-error-display">
-          <span class="error-icon">⚠️</span>
-          {{ scannerError }}
-        </div>
-        
-        <div v-if="cameraReady" class="scanner-status">
-          <span class="status-indicator active"></span>
-          <span class="status-text">Camera Active</span>
-        </div>
+    <QRScannerModal
+      :show="showScanner"
+      @detect="onDetect"
+      @close="closeScanner"
+    />
+
+    <!-- Help Section -->
+    <div class="help-section">
+      <div class="help-buttons">
+        <button @click="callHelp" class="help-btn call-btn">
+          📞 Call for Help
+        </button>
+        <button @click="whatsappHelp" class="help-btn whatsapp-btn">
+          💬 WhatsApp Support
+        </button>
       </div>
+    </div>
+
+    <!-- Slider Component -->
+    <div class="slider-section">
+      <SliderComponent />
     </div>
   </div>
 </template>
@@ -708,315 +439,6 @@ const claimReward = async () => {
   margin: 0 auto;
 }
 
-/* Prize Badge */
-.prize-badge {
-  position: relative;
-  display: inline-block;
-  background: linear-gradient(135deg, #ffd700, #ffed4e);
-  color: #000;
-  padding: 10px 20px;
-  border-radius: 50px;
-  font-size: 16px;
-  font-weight: 800;
-  margin-bottom: 20px;
-  box-shadow: 0 8px 24px rgba(255, 215, 0, 0.6),
-              inset 0 2px 4px rgba(255, 255, 255, 0.5);
-  border: 3px solid #fff;
-  overflow: hidden;
-}
-
-.badge-shine {
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 50%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
-  animation: shine 3s infinite;
-}
-
-@keyframes shine {
-  to { left: 200%; }
-}
-
-/* Carousel Section */
-.carousel-section {
-  margin-bottom: 24px;
-  padding: 0 10px;
-}
-
-.gifts-swiper {
-  padding: 10px 0;
-}
-
-.gift-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  padding: 12px 8px;
-  text-align: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border: 2px solid rgba(255, 215, 0, 0.3);
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.gift-image {
-  width: 90px;
-  height: 90px;
-  object-fit: contain;
-  margin: 0 auto 6px auto;
-  display: block;
-}
-
-.gift-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.gift-points {
-  font-size: 10px;
-  font-weight: 700;
-  color: #10b981;
-}
-
-/* Excitement Chips */
-.excitement-chips {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-}
-
-.chip {
-  background: rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-/* Form Container */
-.form-container {
-  position: relative;
-  background: rgba(255, 255, 255, 0.98);
-  padding: 32px 28px;
-  border-radius: 24px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3),
-              0 0 40px rgba(255, 215, 0, 0.3);
-  border: 3px solid rgba(255, 215, 0, 0.5);
-}
-
-.form-glow {
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  background: linear-gradient(45deg, #ffd700, #ff6b6b, #4ecdc4, #ffd700);
-  background-size: 400% 400%;
-  border-radius: 24px;
-  z-index: -1;
-  opacity: 0.6;
-  animation: glow-rotate 4s linear infinite;
-  filter: blur(8px);
-}
-
-@keyframes glow-rotate {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-/* Scan QR Button */
-.scan-qr-button {
-  width: 100%;
-  padding: 14px;
-  background: white;
-  border: 3px solid #10b981;
-  border-radius: 12px;
-  color: #10b981;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
-  transition: all 0.3s ease;
-}
-
-.scan-qr-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
-}
-
-.scan-icon {
-  font-size: 20px;
-}
-
-/* "Or" Divider */
-.divider.or-divider {
-  margin: 20px 0;
-}
-
-.input-wrapper {
-  margin-bottom: 18px;
-}
-
-/* Check Button */
-.check-button {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  font-size: 18px;
-  font-weight: 800;
-  padding: 16px 32px;
-  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
-}
-
-.button-content {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  position: relative;
-  z-index: 1;
-}
-
-.button-icon {
-  font-size: 22px;
-  animation: bounce-icon 1s infinite;
-}
-
-@keyframes bounce-icon {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-
-.button-shine {
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 50%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
-  animation: button-shine 2s infinite;
-}
-
-@keyframes button-shine {
-  to { left: 200%; }
-}
-
-/* Divider */
-.divider {
-  position: relative;
-  text-align: center;
-  margin: 24px 0;
-}
-
-.divider::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, #e5e7eb, transparent);
-}
-
-.divider span {
-  position: relative;
-  background: white;
-  padding: 0 14px;
-  color: #6b7280;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-/* Login Link */
-.login-link {
-  width: 100%;
-  padding: 14px;
-  background: white;
-  border: 3px solid #10b981;
-  border-radius: 12px;
-  color: #10b981;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: inherit;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
-  transition: all 0.3s ease;
-}
-
-.login-link:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
-}
-
-.login-icon {
-  font-size: 18px;
-}
-
-/* Winner Showcase */
-.winner-showcase {
-  margin-top: 24px;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border-radius: 14px;
-  padding: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  overflow: hidden;
-}
-
-.winner-badge {
-  font-size: 13px;
-  font-weight: 700;
-  color: #ffd700;
-  margin-bottom: 10px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.winners-scroll {
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.winner-item {
-  display: inline-flex;
-  gap: 24px;
-}
-
-.winner-item span {
-  display: inline-block;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 6px 14px;
-  background: rgba(255, 215, 0, 0.2);
-  border-radius: 8px;
-}
-
-.winner-item strong {
-  color: #ffd700;
-}
-
 /* Loading & Error */
 .loading-overlay {
   position: fixed;
@@ -1061,337 +483,62 @@ const claimReward = async () => {
   font-weight: 600;
 }
 
-/* *** FIXED: Enhanced QR Scanner Modal Styles *** */
-.scanner-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: #000;
-  z-index: 2000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.scanner-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.close-scanner-btn {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 2002;
-  background: rgba(255, 255, 255, 0.25);
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  color: white;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  font-size: 24px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(10px);
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.close-scanner-btn:hover {
-  background: rgba(255, 255, 255, 0.35);
-  transform: scale(1.1);
-}
-
-.scanner-overlay-content {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 2001;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-/* *** FIXED: Enhanced scanner box with animated corners *** */
-.scanner-box {
-  position: relative;
-  width: 280px;
-  height: 280px;
-  border-radius: 24px;
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(5px);
-  overflow: hidden;
-}
-
-.scanner-corners {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.corner {
-  position: absolute;
-  width: 40px;
-  height: 40px;
-  border: 4px solid #10b981;
-  animation: corner-pulse 2s infinite;
-}
-
-.corner-tl {
-  top: 0;
-  left: 0;
-  border-right: none;
-  border-bottom: none;
-  border-top-left-radius: 24px;
-}
-
-.corner-tr {
-  top: 0;
-  right: 0;
-  border-left: none;
-  border-bottom: none;
-  border-top-right-radius: 24px;
-}
-
-.corner-bl {
-  bottom: 0;
-  left: 0;
-  border-right: none;
-  border-top: none;
-  border-bottom-left-radius: 24px;
-}
-
-.corner-br {
-  bottom: 0;
-  right: 0;
-  border-left: none;
-  border-top: none;
-  border-bottom-right-radius: 24px;
-}
-
-@keyframes corner-pulse {
-  0%, 100% {
-    opacity: 1;
-    border-color: #10b981;
-  }
-  50% {
-    opacity: 0.5;
-    border-color: #34d399;
-  }
-}
-
-/* *** FIXED: Animated scanning line *** */
-.scanner-line {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, #10b981, transparent);
-  box-shadow: 0 0 20px #10b981, 0 0 40px #10b981;
-  animation: scan-line 2s ease-in-out infinite;
-}
-
-@keyframes scan-line {
-  0% {
-    top: 0;
-    opacity: 0;
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    top: 100%;
-    opacity: 0;
-  }
-}
-
-.scanner-instructions {
-  margin-top: 32px;
+/* Help Section */
+.help-section {
+  padding: 20px;
   text-align: center;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.scanner-text {
-  color: white;
+.help-buttons {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.help-btn {
+  padding: 12px 24px;
+  border-radius: 25px;
+  border: none;
   font-size: 16px;
   font-weight: 600;
-  margin: 0;
-  padding: 12px 24px;
-  background: rgba(0, 0, 0, 0.6);
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.loading-text {
-  animation: pulse-text 1.5s infinite;
-}
-
-@keyframes pulse-text {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-.scanner-error-display {
-  position: absolute;
-  bottom: 100px;
-  left: 20px;
-  right: 20px;
-  background: #ef4444;
-  color: white;
-  padding: 16px 20px;
-  border-radius: 12px;
-  text-align: center;
-  font-weight: 600;
-  font-size: 14px;
-  z-index: 2003;
-  pointer-events: all;
-  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.5);
+  cursor: pointer;
+  transition: all 0.3s ease;
   display: flex;
   align-items: center;
+  gap: 8px;
+  min-width: 160px;
   justify-content: center;
-  gap: 8px;
-  animation: slide-up 0.3s ease-out;
 }
 
-@keyframes slide-up {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.error-icon {
-  font-size: 20px;
-}
-
-/* *** FIXED: Camera status indicator *** */
-.scanner-status {
-  position: absolute;
-  bottom: 30px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.6);
-  padding: 8px 16px;
-  border-radius: 20px;
-  backdrop-filter: blur(10px);
-}
-
-.status-indicator {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #10b981;
-}
-
-.status-indicator.active {
-  animation: blink-indicator 1.5s infinite;
-  box-shadow: 0 0 10px #10b981;
-}
-
-@keyframes blink-indicator {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-.status-text {
+.call-btn {
+  background: linear-gradient(135deg, #10b981, #059669);
   color: white;
-  font-size: 13px;
-  font-weight: 600;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
 }
 
-/* Responsive */
-@media (max-width: 640px) {
-  .prize-badge { 
-    font-size: 14px; 
-    padding: 8px 16px; 
-  }
-  
-  .excitement-chips { 
-    gap: 8px; 
-  }
-  
-  .chip { 
-    font-size: 11px; 
-    padding: 5px 12px; 
-  }
-  
-  .form-container { 
-    padding: 28px 24px; 
-  }
-  
-  .check-button { 
-    font-size: 16px; 
-    padding: 14px 28px; 
-  }
-  
-  .gift-image {
-    width: 100px;
-    height: 60px;
-  }
-  
-  .gift-name { 
-    font-size: 10px; 
-  }
-  
-  .scanner-box {
-    width: 240px;
-    height: 240px;
-  }
-  
-  .corner {
-    width: 32px;
-    height: 32px;
-    border-width: 3px;
-  }
-  
-  .scanner-text {
-    font-size: 14px;
-    padding: 10px 20px;
-  }
-  
-  .close-scanner-btn {
-    width: 40px;
-    height: 40px;
-    font-size: 20px;
-    top: 16px;
-    right: 16px;
-  }
+.call-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
 }
 
-/* *** FIXED: Additional mobile optimizations *** */
-@media (max-width: 480px) {
-  .scanner-box {
-    width: 220px;
-    height: 220px;
-  }
-  
-  .scanner-text {
-    font-size: 13px;
-  }
-  
-  .scanner-error-display {
-    font-size: 13px;
-    padding: 14px 18px;
-    left: 16px;
-    right: 16px;
-  }
+.whatsapp-btn {
+  background: linear-gradient(135deg, #25d366, #128c7e);
+  color: white;
+  box-shadow: 0 4px 15px rgba(37, 211, 102, 0.3);
+}
+
+.whatsapp-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 211, 102, 0.4);
+}
+
+/* Slider Section */
+.slider-section {
+  padding: 30px 20px;
+  background: rgba(255, 255, 255, 0.05);
 }
 </style>

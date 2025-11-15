@@ -171,16 +171,6 @@ const goBack = () => router.back()
         {{ t('cart.cart') }}
       </motion.h1>
 
-      <motion.div
-        class="wallet-card card"
-        :initial="{ opacity: 0, scale: 0.9 }"
-        :animate="{ opacity: 1, scale: 1 }"
-        :transition="{ delay: 0.1 }"
-      >
-        <span class="wallet-label">{{ t('redeem.yourBalance') }}</span>
-        <h2 class="wallet-balance">{{ cartStore.formattedWalletBalance }}</h2>
-      </motion.div>
-
       <div v-if="cartStore.loading" class="loading">
         <div class="spinner"></div>
         <p>{{ t('common.loading') }}</p>

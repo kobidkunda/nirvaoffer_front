@@ -18,6 +18,7 @@ import HelpModal from '@/components/common/HelpModal.vue'
 import LanguageModal from '@/components/common/LanguageModal.vue'
 import BaseButton from '@/components/common/BaseButton.vue'
 import BaseInput from '@/components/common/BaseInput.vue'
+import SliderComponent from '@/components/common/SliderComponent.vue'
 
 // --- Initialize Stores, Router, and Composables ---
 const router = useRouter()
@@ -28,11 +29,9 @@ const { t, locale } = useLanguage() // This now works globally
 const toast = useToast()
 
 // --- Page State ---
-const loadingSlider = ref(true)
 const loadingCategories = ref(true)
 const loadingProducts = ref(true)
 const placingOrder = ref(false)
-const slider = ref([])
 const categories = ref([])
 const products = ref([])
 const error = ref('')
@@ -50,18 +49,6 @@ const walletBalance = computed(() => walletStore.balance)
 const formattedBalance = computed(() => walletStore.formattedBalance)
 
 // --- Data Fetching ---
-const fetchSlider = async () => {
-  loadingSlider.value = true
-  try {
-    const response = await shopAPI.getSlider()
-    slider.value = response.slides || []
-  } catch (err) {
-    console.error('Failed to fetch slider:', err)
-  } finally {
-    loadingSlider.value = false
-  }
-}
-
 const fetchCategories = async () => {
   loadingCategories.value = true
   try {
@@ -91,7 +78,7 @@ const fetchProducts = async () => {
 
 // Fetch data on mount
 onMounted(async () => {
-  await Promise.all([fetchSlider(), fetchCategories(), fetchProducts()])
+  await Promise.all([fetchCategories(), fetchProducts()])
 })
 
 // Refetch categories and products if the user changes the language
@@ -127,30 +114,11 @@ const goToDashboard = () => router.push('/dashboard')
     <div class="content">
       <!-- Slider -->
       <motion.div
-        v-if="!loadingSlider"
-        class="slider-section"
+        class="slider-wrapper"
         :initial="{ opacity: 0, y: -20 }"
         :animate="{ opacity: 1, y: 0 }"
       >
-        <Swiper
-          :slides-per-view="1"
-          :autoplay="{ delay: 3000 }"
-          :loop="true"
-          :pagination="{ clickable: true }"
-          class="slider-swiper"
-        >
-          <SwiperSlide v-for="slide in slider" :key="slide.id">
-            <div class="slide" :style="{ backgroundImage: `url(${slide.images.desktop})` }">
-              <div class="slide-content">
-                <h2>{{ slide.title }}</h2>
-                <p>{{ slide.description }}</p>
-                <a v-if="slide.link" :href="slide.link.url" :target="slide.link.targetBlank ? '_blank' : '_self'" class="slide-cta">
-                  {{ slide.link.ctaText }}
-                </a>
-              </div>
-            </div>
-          </SwiperSlide>
-        </Swiper>
+        <SliderComponent />
       </motion.div>
 
       <motion.h1
@@ -181,9 +149,10 @@ const goToDashboard = () => router.push('/dashboard')
       >
         <h2 class="section-title">{{ t('common.categories') }}</h2>
         <Swiper
-          :slides-per-view="4"
+          :slides-per-view="3"
           :space-between="16"
-          :loop="false"
+          :loop="true"
+          :autoplay="{ delay: 2000, disableOnInteraction: false }"
           :breakpoints="{
             320: { slidesPerView: 2 },
             640: { slidesPerView: 3 },
@@ -545,61 +514,6 @@ const goToDashboard = () => router.push('/dashboard')
   margin-top: 0;
 }
 
-/* Slider Styles */
-.slider-section {
-  margin-bottom: 30px;
-}
-
-.slider-swiper {
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.slide {
-  position: relative;
-  height: 300px;
-  background-size: cover;
-  background-position: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.slide-content {
-  text-align: center;
-  color: white;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 20px;
-  border-radius: 12px;
-  max-width: 400px;
-}
-
-.slide h2 {
-  font-size: 24px;
-  font-weight: 700;
-  margin: 0 0 8px 0;
-}
-
-.slide p {
-  font-size: 16px;
-  margin: 0 0 16px 0;
-}
-
-.slide-cta {
-  display: inline-block;
-  background: #10b981;
-  color: white;
-  padding: 10px 20px;
-  border-radius: 8px;
-  text-decoration: none;
-  font-weight: 600;
-  transition: background 0.2s;
-}
-
-.slide-cta:hover {
-  background: #059669;
-}
 
 /* Categories Styles */
 .categories-section {

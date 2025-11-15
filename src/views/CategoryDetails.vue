@@ -122,10 +122,6 @@ const goBack = () => router.back()
           </div>
         </div>
 
-        <div class="wallet-card card">
-          <span class="wallet-label">{{ t('redeem.yourBalance') }}</span>
-          <h2 class="wallet-balance">{{ formattedBalance }}</h2>
-        </div>
 
         <div class="products-section">
           <h2 class="section-title">{{ t('categoryDetails.products') }}</h2>

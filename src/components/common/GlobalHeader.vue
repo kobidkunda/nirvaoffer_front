@@ -6,7 +6,7 @@ import { useLanguage } from '@/composables/useLanguage'
 import { useAuthStore } from '@/stores/auth'
 import { useCartStore } from '@/stores/cart'
 import { useRouter } from 'vue-router'
-import biolasticLogo from '@/assets/logo/logo_biolastic.png'
+import biolasticLogo from '@/assets/logo/logo_offer.png'
 import nirvaLogo from '@/assets/logo/nirva-logo-sq.png'
 
 const emit = defineEmits(['openHelp', 'openLanguage'])
@@ -51,7 +51,7 @@ const openHelpAndCloseMenu = () => {
 
 const goToHome = () => {
   if (isLoggedIn.value) {
-    router.push('/dashboard')
+    router.push('/')
   } else {
     router.push('/')
   }
@@ -83,15 +83,6 @@ const goToHome = () => {
            alt="Biolastic"
            class="logo biolastic-logo"
            :initial="{ opacity: 0, x: -20 }"
-           :animate="{ opacity: 1, x: 0 }"
-           :transition="{ duration: 0.6 }"
-         />
-         <span class="logo-divider">&</span>
-         <motion.img
-           :src="nirvaLogo"
-           alt="Nirva"
-           class="logo nirva-logo"
-           :initial="{ opacity: 0, x: 20 }"
            :animate="{ opacity: 1, x: 0 }"
            :transition="{ duration: 0.6 }"
          />
@@ -364,7 +355,7 @@ const goToHome = () => {
 }
 
 .logo {
-  height: 15px;
+  height: 50px!important;
   width: auto;
   object-fit: contain;
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.1));

@@ -4903,12 +4903,31 @@ index.html
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/x-icon" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.json" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Biolastic | Nirva Offer Redeem</title>
+  <meta name="theme-color" content="#10b981" />
+  <meta name="description" content="Scan QR codes, earn cashback, redeem rewards with Nirva & Biolastic products" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Nirva Loyalty" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Nirva Biolastic Loyalty Program</title>
 </head>
 <body>
   <div id="app"></div>
   <script type="module" src="/src/main.js"></script>
+
+  <!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-FSKV2EGWYT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-FSKV2EGWYT');
+</script>
+
 </body>
 
 </html>
@@ -4969,35 +4988,81 @@ package.json
 
 ================================================================================
 
+public/manifest.json
+{code}
+{
+  "name": "Nirva Biolastic Loyalty Program",
+  "short_name": "Nirva Loyalty",
+  "description": "Scan QR codes, earn cashback, redeem rewards with Nirva & Biolastic products",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#10b981",
+  "background_color": "#ffffff",
+  "scope": "/",
+  "lang": "en",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "screenshots": [],
+  "categories": ["shopping", "lifestyle", "finance"],
+  "icons": [
+    {
+      "src": "pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
+{/code}
+
+================================================================================
+
 src/App.vue
 {code}
 <!-- src/App.vue -->
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useLanguageStore } from '@/stores/language'
+import { useLanguage } from '@/composables/useLanguage'
 import { RouterView } from 'vue-router'
+import { setToastContainer } from '@/composables/useToast'
 import LanguageModal from '@/components/common/LanguageModal.vue'
+import ToastContainer from '@/components/common/ToastContainer.vue'
 
-const languageStore = useLanguageStore()
+const { changeLanguage } = useLanguage()
 const showLanguageModal = ref(false)
+const toastContainerRef = ref(null)
+
+// Set up toast container for global use
+onMounted(() => {
+  if (toastContainerRef.value) {
+    setToastContainer(toastContainerRef.value)
+  }
+})
 
 onMounted(() => {
   // Check if user has selected language before
   const hasSelectedLanguage = localStorage.getItem('language_selected')
-  
+
   if (!hasSelectedLanguage) {
     // First visit - show language selection modal
     showLanguageModal.value = true
-  } else {
-    // Returning user - load saved language
-    const savedLanguage = localStorage.getItem('user_language')
-    if (savedLanguage) {
-      languageStore.setLanguage(savedLanguage)
-    } else {
-      // Fallback to browser language detection
-      languageStore.detectBrowserLanguage()
-    }
   }
+  // Note: i18n is already initialized with saved language in main.js
+  // No need to call changeLanguage here to avoid conflicts
 })
 
 const handleLanguageSelect = () => {
@@ -5008,7 +5073,7 @@ const handleLanguageSelect = () => {
 <template>
   <div id="app">
     <!-- First Visit Language Selection -->
-    <LanguageModal 
+    <LanguageModal
       :show="showLanguageModal"
       :is-first-visit="true"
       @select="handleLanguageSelect"
@@ -5017,6 +5082,9 @@ const handleLanguageSelect = () => {
 
     <!-- Main App Content -->
     <RouterView />
+
+    <!-- Toast Notifications -->
+    <ToastContainer ref="toastContainerRef" />
   </div>
 </template>
 
@@ -5061,7 +5129,7 @@ export const apiClient = ofetch.create({
   // Request interceptor
   onRequest({ options }) {
     console.log('→ API Request:', options.method, options.baseURL + (options.url || ''))
-    
+
     // Add auth token if exists
     const token = localStorage.getItem('auth_token')
     if (token) {
@@ -5071,7 +5139,17 @@ export const apiClient = ofetch.create({
         Authorization: `Bearer ${token}`
       }
     }
-    
+
+    // Add CSRF token if exists (for Laravel Sanctum)
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+                     localStorage.getItem('csrf_token')
+    if (csrfToken) {
+      options.headers = {
+        ...options.headers,
+        'X-CSRF-TOKEN': csrfToken
+      }
+    }
+
     // Add default headers
     options.headers = {
       ...options.headers,
@@ -5182,13 +5260,105 @@ export const redemptionAPI = {
     apiClient('/redeem/products', {
       params: { lang }
     }),
-  
+
   // Place redemption order
   placeOrder: (productId, quantity) =>
     apiClient('/redeem/order', {
       method: 'POST',
       body: { product_id: productId, quantity }
     })
+}
+
+// Shop APIs
+export const shopAPI = {
+  // Get slider data
+  getSlider: () => apiClient('/json/slider'),
+
+  // Get categories
+  getCategories: (lang = 'en') =>
+    apiClient('/categories', {
+      params: { lang }
+    }),
+
+  // Get category by slug
+  getCategory: (slug, lang = 'en') =>
+    apiClient(`/categories/${slug}`, {
+      params: { lang }
+    }),
+
+  // Get all products
+  getProducts: (lang = 'en', categoryId, brand) => {
+    const params = { lang }
+    if (categoryId) params.category_id = categoryId
+    if (brand) params.brand = brand
+    return apiClient('/products', { params })
+  },
+
+  // Get product details
+  getProduct: (id, lang = 'en') =>
+    apiClient(`/products/${id}`, {
+      params: { lang }
+    })
+}
+
+// Cart APIs
+export const cartAPI = {
+  // Add product to cart
+  addToCart: (productId, quantity) =>
+    apiClient('/cart/add', {
+      method: 'POST',
+      body: { product_id: productId, quantity }
+    }),
+
+  // Get user's cart
+  getCart: (lang = 'en') =>
+    apiClient('/cart', {
+      params: { lang }
+    }),
+
+  // Update cart item quantity
+  updateCartItem: (cartItemId, quantity) =>
+    apiClient(`/cart/update/${cartItemId}`, {
+      method: 'PUT',
+      body: { quantity }
+    }),
+
+  // Remove item from cart
+  removeCartItem: (cartItemId) =>
+    apiClient(`/cart/remove/${cartItemId}`, {
+      method: 'DELETE'
+    }),
+
+  // Clear entire cart
+  clearCart: () =>
+    apiClient('/cart/clear', {
+      method: 'DELETE'
+    }),
+
+  // Checkout cart
+  checkoutCart: (notes = null) =>
+    apiClient('/cart/checkout', {
+      method: 'POST',
+      body: notes ? { notes } : {}
+    })
+}
+
+// Orders APIs
+export const ordersAPI = {
+  // Get user's orders
+  getOrders: () =>
+    apiClient('/redeem/orders'),
+
+  // Get order details
+  getOrder: (id) =>
+    apiClient(`/redeem/orders/${id}`)
+}
+
+// Wallet APIs
+export const walletAPI = {
+  // Get wallet information and transactions
+  getWallet: () =>
+    apiClient('/wallet')
 }
 {/code}
 
@@ -5282,6 +5452,7 @@ declare global {
   const pausableWatch: typeof import('@vueuse/core').pausableWatch
   const provide: typeof import('vue').provide
   const provideLocal: typeof import('@vueuse/core').provideLocal
+  const provideToast: typeof import('./composables/useToast.js').provideToast
   const reactify: typeof import('@vueuse/core').reactify
   const reactifyObject: typeof import('@vueuse/core').reactifyObject
   const reactive: typeof import('vue').reactive
@@ -5300,6 +5471,7 @@ declare global {
   const resolveRef: typeof import('@vueuse/core').resolveRef
   const setActivePinia: typeof import('pinia').setActivePinia
   const setMapStoreSuffix: typeof import('pinia').setMapStoreSuffix
+  const setToastContainer: typeof import('./composables/useToast.js').setToastContainer
   const shallowReactive: typeof import('vue').shallowReactive
   const shallowReadonly: typeof import('vue').shallowReadonly
   const shallowRef: typeof import('vue').shallowRef
@@ -5349,6 +5521,7 @@ declare global {
   const useBroadcastChannel: typeof import('@vueuse/core').useBroadcastChannel
   const useBrowserLocation: typeof import('@vueuse/core').useBrowserLocation
   const useCached: typeof import('@vueuse/core').useCached
+  const useCartStore: typeof import('./stores/cart.js').useCartStore
   const useClipboard: typeof import('@vueuse/core').useClipboard
   const useClipboardItems: typeof import('@vueuse/core').useClipboardItems
   const useCloned: typeof import('@vueuse/core').useCloned
@@ -5480,6 +5653,7 @@ declare global {
   const useTitle: typeof import('@vueuse/core').useTitle
   const useToNumber: typeof import('@vueuse/core').useToNumber
   const useToString: typeof import('@vueuse/core').useToString
+  const useToast: typeof import('./composables/useToast.js').useToast
   const useToggle: typeof import('@vueuse/core').useToggle
   const useTransition: typeof import('@vueuse/core').useTransition
   const useUrlSearchParams: typeof import('@vueuse/core').useUrlSearchParams
@@ -5622,6 +5796,7 @@ declare module 'vue' {
     readonly resolveRef: UnwrapRef<typeof import('@vueuse/core')['resolveRef']>
     readonly setActivePinia: UnwrapRef<typeof import('pinia')['setActivePinia']>
     readonly setMapStoreSuffix: UnwrapRef<typeof import('pinia')['setMapStoreSuffix']>
+    readonly setToastContainer: UnwrapRef<typeof import('./composables/useToast.js')['setToastContainer']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
     readonly shallowReadonly: UnwrapRef<typeof import('vue')['shallowReadonly']>
     readonly shallowRef: UnwrapRef<typeof import('vue')['shallowRef']>
@@ -5671,6 +5846,7 @@ declare module 'vue' {
     readonly useBroadcastChannel: UnwrapRef<typeof import('@vueuse/core')['useBroadcastChannel']>
     readonly useBrowserLocation: UnwrapRef<typeof import('@vueuse/core')['useBrowserLocation']>
     readonly useCached: UnwrapRef<typeof import('@vueuse/core')['useCached']>
+    readonly useCartStore: UnwrapRef<typeof import('./stores/cart.js')['useCartStore']>
     readonly useClipboard: UnwrapRef<typeof import('@vueuse/core')['useClipboard']>
     readonly useClipboardItems: UnwrapRef<typeof import('@vueuse/core')['useClipboardItems']>
     readonly useCloned: UnwrapRef<typeof import('@vueuse/core')['useCloned']>
@@ -5802,6 +5978,7 @@ declare module 'vue' {
     readonly useTitle: UnwrapRef<typeof import('@vueuse/core')['useTitle']>
     readonly useToNumber: UnwrapRef<typeof import('@vueuse/core')['useToNumber']>
     readonly useToString: UnwrapRef<typeof import('@vueuse/core')['useToString']>
+    readonly useToast: UnwrapRef<typeof import('./composables/useToast.js')['useToast']>
     readonly useToggle: UnwrapRef<typeof import('@vueuse/core')['useToggle']>
     readonly useTransition: UnwrapRef<typeof import('@vueuse/core')['useTransition']>
     readonly useUrlSearchParams: UnwrapRef<typeof import('@vueuse/core')['useUrlSearchParams']>
@@ -5858,14 +6035,23 @@ declare module 'vue' {
   export interface GlobalComponents {
     BaseButton: typeof import('./components/common/BaseButton.vue')['default']
     BaseInput: typeof import('./components/common/BaseInput.vue')['default']
+    ExcitementChips: typeof import('./components/scan/ExcitementChips.vue')['default']
+    FloatingActions: typeof import('./components/common/FloatingActions.vue')['default']
+    GiftCarousel: typeof import('./components/scan/GiftCarousel.vue')['default']
     GlobalHeader: typeof import('./components/common/GlobalHeader.vue')['default']
     HelloWorld: typeof import('./components/HelloWorld.vue')['default']
     HelpModal: typeof import('./components/common/HelpModal.vue')['default']
     LanguageModal: typeof import('./components/common/LanguageModal.vue')['default']
     OTPModal: typeof import('./components/common/OTPModal.vue')['default']
+    PrizeBadge: typeof import('./components/scan/PrizeBadge.vue')['default']
+    QRScannerModal: typeof import('./components/scan/QRScannerModal.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    ScanForm: typeof import('./components/scan/ScanForm.vue')['default']
     ScratchCard: typeof import('./components/reward/ScratchCard.vue')['default']
+    Toast: typeof import('./components/common/Toast.vue')['default']
+    ToastContainer: typeof import('./components/common/ToastContainer.vue')['default']
+    WinnerShowcase: typeof import('./components/scan/WinnerShowcase.vue')['default']
   }
 }
 {/code}
@@ -6118,19 +6304,198 @@ const updateValue = (event) => {
 
 ================================================================================
 
+src/components/common/FloatingActions.vue
+{code}
+<!-- src/components/common/FloatingActions.vue -->
+<template>
+  <div class="floating-actions">
+    <!-- Language Button -->
+    <motion.button
+      @click="$emit('openLanguage')"
+      class="fab language-fab"
+      :whileHover="{ scale: 1.1, rotate: 5 }"
+      :whileTap="{ scale: 0.95 }"
+      aria-label="Change Language"
+    >
+      <span class="icon">🌐</span>
+    </motion.button>
+
+    <!-- Help Button -->
+    <motion.button
+      @click="$emit('openHelp')"
+      class="fab help-fab"
+      :animate="{
+        scale: [1, 1.1, 1],
+        rotate: [0, -10, 10, 0]
+      }"
+      :transition="{
+        duration: 2,
+        repeat: Infinity,
+        repeatDelay: 3
+      }"
+      :whileHover="{ scale: 1.15 }"
+      :whileTap="{ scale: 0.95 }"
+      aria-label="Help"
+    >
+      <span class="icon">❓</span>
+      <span class="ping"></span>
+    </motion.button>
+  </div>
+</template>
+
+<script setup>
+import { motion } from 'motion-v'
+
+defineEmits(['openHelp', 'openLanguage'])
+</script>
+
+<style scoped>
+.floating-actions {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 2500;
+}
+
+.fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.language-fab {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+}
+
+.help-fab {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+}
+
+.icon {
+  font-size: 20px;
+}
+
+.ping {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 12px;
+  height: 12px;
+  background: #ef4444;
+  border-radius: 50%;
+  animation: ping 2s infinite;
+}
+
+@keyframes ping {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+.fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .floating-actions {
+    bottom: 16px;
+    right: 16px;
+  }
+
+  .fab {
+    width: 48px;
+    height: 48px;
+  }
+
+  .icon {
+    font-size: 18px;
+  }
+}
+</style>
+{/code}
+
+================================================================================
+
 src/components/common/GlobalHeader.vue
 {code}
 <!-- src/components/common/GlobalHeader.vue -->
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { motion } from 'motion-v'
 import { useLanguage } from '@/composables/useLanguage'
+import { useAuthStore } from '@/stores/auth'
+import { useCartStore } from '@/stores/cart'
+import { useRouter } from 'vue-router'
 import biolasticLogo from '@/assets/logo/logo_biolastic.png'
 import nirvaLogo from '@/assets/logo/nirva-logo-sq.png'
 
 const emit = defineEmits(['openHelp', 'openLanguage'])
 
 const { t } = useLanguage()
+const authStore = useAuthStore()
+const cartStore = useCartStore()
+const router = useRouter()
+
+const isLoggedIn = computed(() => authStore.isLoggedIn)
+const cartItemCount = computed(() => cartStore.itemCount)
+const showMenu = ref(false)
+
+const goToCart = () => {
+  router.push('/cart')
+}
+
+const toggleMenu = () => {
+  showMenu.value = !showMenu.value
+}
+
+const navigateTo = (route) => {
+  showMenu.value = false
+  router.push(route)
+}
+
+const logout = () => {
+  showMenu.value = false
+  authStore.logout()
+  router.push('/')
+}
+
+const openLanguageAndCloseMenu = () => {
+  showMenu.value = false
+  emit('openLanguage')
+}
+
+const openHelpAndCloseMenu = () => {
+  showMenu.value = false
+  emit('openHelp')
+}
+
+const goToHome = () => {
+  if (isLoggedIn.value) {
+    router.push('/dashboard')
+  } else {
+    router.push('/')
+  }
+}
 </script>
 
 <template>
@@ -6152,62 +6517,154 @@ const { t } = useLanguage()
     <!-- Content -->
     <div class="header-content">
       <!-- Dual Logo Section -->
-      <div class="logos">
-        <motion.img 
-          :src="biolasticLogo" 
-          alt="Biolastic"
-          class="logo biolastic-logo"
-          :initial="{ opacity: 0, x: -20 }"
-          :animate="{ opacity: 1, x: 0 }"
-          :transition="{ duration: 0.6 }"
-        />
-        <span class="logo-divider">&</span>
-        <motion.img 
-          :src="nirvaLogo" 
-          alt="Nirva"
-          class="logo nirva-logo"
-          :initial="{ opacity: 0, x: 20 }"
-          :animate="{ opacity: 1, x: 0 }"
-          :transition="{ duration: 0.6 }"
-        />
-      </div>
+       <div class="logos" @click="goToHome" role="button" tabindex="0" @keydown.enter="goToHome">
+         <motion.img
+           :src="biolasticLogo"
+           alt="Biolastic"
+           class="logo biolastic-logo"
+           :initial="{ opacity: 0, x: -20 }"
+           :animate="{ opacity: 1, x: 0 }"
+           :transition="{ duration: 0.6 }"
+         />
+         <span class="logo-divider">&</span>
+         <motion.img
+           :src="nirvaLogo"
+           alt="Nirva"
+           class="logo nirva-logo"
+           :initial="{ opacity: 0, x: 20 }"
+           :animate="{ opacity: 1, x: 0 }"
+           :transition="{ duration: 0.6 }"
+         />
+       </div>
 
       <!-- Action Buttons -->
       <div class="actions">
-        <!-- Language Button -->
-        <motion.button
-          @click="emit('openLanguage')"
-          class="action-btn language-btn"
-          :whileHover="{ scale: 1.1, rotate: 5 }"
-          :whileTap="{ scale: 0.95 }"
-          aria-label="Change Language"
-        >
-          <span class="icon">🌐</span>
-          <span class="label">{{ t('common.language') }}</span>
-        </motion.button>
+        <!-- For Logged-in Users -->
+        <template v-if="isLoggedIn">
+          <!-- Cart Button -->
+          <motion.button
+            @click="goToCart"
+            class="action-btn cart-btn"
+            :whileHover="{ scale: 1.1 }"
+            :whileTap="{ scale: 0.95 }"
+            aria-label="Shopping Cart"
+          >
+            <span class="icon">🛒</span>
+            <span class="label">{{ t('cart.cart') }}</span>
+            <span v-if="cartItemCount > 0" class="cart-badge">{{ cartItemCount }}</span>
+          </motion.button>
 
-        <!-- Help Button (Animated) -->
-        <motion.button
-          @click="emit('openHelp')"
-          class="action-btn help-btn"
-          :animate="{ 
-            scale: [1, 1.1, 1],
-            rotate: [0, -10, 10, 0]
-          }"
-          :transition="{ 
-            duration: 2,
-            repeat: Infinity,
-            repeatDelay: 3
-          }"
-          :whileHover="{ scale: 1.15 }"
-          :whileTap="{ scale: 0.95 }"
-          aria-label="Help"
-        >
-          <span class="icon">❓</span>
-          <span class="label">{{ t('common.help') }}</span>
-          <span class="ping"></span>
-        </motion.button>
+          <!-- Menu Button -->
+          <motion.button
+            @click="toggleMenu"
+            class="action-btn menu-btn"
+            :whileHover="{ scale: 1.1 }"
+            :whileTap="{ scale: 0.95 }"
+            aria-label="Menu"
+          >
+            <span class="icon">☰</span>
+            <span class="label">{{ t('common.menu') }}</span>
+          </motion.button>
+        </template>
+
+        <!-- For Non-logged-in Users -->
+        <template v-else>
+          <!-- Language Button -->
+          <motion.button
+            @click="emit('openLanguage')"
+            class="action-btn language-btn"
+            :whileHover="{ scale: 1.1, rotate: 5 }"
+            :whileTap="{ scale: 0.95 }"
+            aria-label="Change Language"
+          >
+            <span class="icon">🌐</span>
+            <span class="label">{{ t('common.language') }}</span>
+          </motion.button>
+
+          <!-- Help Button (Animated) -->
+          <motion.button
+            @click="emit('openHelp')"
+            class="action-btn help-btn"
+            :animate="{
+              scale: [1, 1.1, 1],
+              rotate: [0, -10, 10, 0]
+            }"
+            :transition="{
+              duration: 2,
+              repeat: Infinity,
+              repeatDelay: 3
+            }"
+            :whileHover="{ scale: 1.15 }"
+            :whileTap="{ scale: 0.95 }"
+            aria-label="Help"
+          >
+            <span class="icon">❓</span>
+            <span class="label">{{ t('common.help') }}</span>
+            <span class="ping"></span>
+          </motion.button>
+        </template>
       </div>
+
+      <!-- Slide-out Menu Portal -->
+      <teleport to="body">
+        <AnimatePresence>
+          <motion.div
+            v-if="showMenu"
+            class="slide-menu-portal"
+            :initial="{ opacity: 0 }"
+            :animate="{ opacity: 1 }"
+            :exit="{ opacity: 0 }"
+            @click.self="showMenu = false"
+          >
+            <motion.div
+              class="menu-content-portal"
+              :initial="{ x: '100%' }"
+              :animate="{ x: 0 }"
+              :exit="{ x: '100%' }"
+              :transition="{ type: 'tween', duration: 0.3 }"
+            >
+              <div class="menu-header">
+                <h3>{{ t('common.menu') }}</h3>
+                <button @click="showMenu = false" class="close-btn">✕</button>
+              </div>
+              <div class="menu-items">
+                <button @click="navigateTo('/profile')" class="menu-item">
+                  <span class="icon">👤</span>
+                  <span>{{ t('profile.title') }}</span>
+                </button>
+                <button @click="navigateTo('/redeem')" class="menu-item">
+                  <span class="icon">🛍️</span>
+                  <span>{{ t('menu.shopNow') }}</span>
+                </button>
+                <button @click="navigateTo('/orders')" class="menu-item">
+                  <span class="icon">📦</span>
+                  <span>{{ t('orders.myOrders') }}</span>
+                </button>
+                <button @click="navigateTo('/wallet')" class="menu-item">
+                  <span class="icon">💰</span>
+                  <span>{{ t('wallet.title') }}</span>
+                </button>
+                <button @click="navigateTo('/scan')" class="menu-item redeem-highlight">
+                  <span class="icon">📱</span>
+                  <span>{{ t('menu.redeemCodes') }}</span>
+                </button>
+                <button @click="openLanguageAndCloseMenu" class="menu-item">
+                  <span class="icon">🌐</span>
+                  <span>{{ t('common.language') }}</span>
+                </button>
+                <button @click="openHelpAndCloseMenu" class="menu-item">
+                  <span class="icon">❓</span>
+                  <span>{{ t('common.help') }}</span>
+                </button>
+                <button @click="logout" class="menu-item logout">
+                  <span class="icon">🚪</span>
+                  <span>{{ t('auth.logout') }}</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>
+      </teleport>
     </div>
   </div>
 </template>
@@ -6338,6 +6795,12 @@ const { t } = useLanguage()
   display: flex;
   align-items: center;
   gap: 12px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.logos:hover {
+  opacity: 0.8;
 }
 
 .logo {
@@ -6461,6 +6924,163 @@ const { t } = useLanguage()
 
 .language-btn .label {
   color: #8b5cf6;
+}
+
+/* Cart Button Effects */
+.cart-btn {
+  border-color: #f59e0b;
+  background: linear-gradient(135deg, #fef3c7 0%, #ffffff 100%);
+  position: relative;
+}
+
+.cart-btn .icon {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.cart-btn .label {
+  color: #f59e0b;
+}
+
+.cart-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #ef4444;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  animation: badge-pulse 2s infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* Menu Button */
+.menu-btn {
+  border-color: #6b7280;
+  background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%);
+}
+
+.menu-btn .icon {
+  color: #374151;
+}
+
+.menu-btn .label {
+  color: #374151;
+}
+
+/* Slide-out Menu Portal */
+.slide-menu-portal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.menu-content-portal {
+  width: 280px;
+  height: 100%;
+  background: white;
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 10000;
+}
+
+.menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.menu-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 5px;
+}
+
+.menu-items {
+  flex: 1;
+  padding: 10px 0;
+}
+
+.menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px 20px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 16px;
+  color: #374151;
+}
+
+.menu-item:hover {
+  background: #f9fafb;
+}
+
+.menu-item .icon {
+  font-size: 18px;
+  width: 20px;
+  text-align: center;
+}
+
+.menu-item.logout {
+  color: #dc2626;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 20px;
+}
+
+.menu-item.logout:hover {
+  background: #fef2f2;
+}
+
+.menu-item.redeem-highlight {
+  background: linear-gradient(135deg, #fef3c7 0%, #ffffff 100%);
+  border-left: 4px solid #f59e0b;
+  font-weight: 600;
+}
+
+.menu-item.redeem-highlight:hover {
+  background: linear-gradient(135deg, #fde68a 0%, #fef3c7 100%);
 }
 
 /* Hover Effects */
@@ -6590,6 +7210,22 @@ const { t } = useLanguage()
               <p>{{ t('help.step3Description') }}</p>
             </div>
           </motion.div>
+
+
+                    <motion.div
+            class="step"
+            :initial="{ opacity: 0, x: -20 }"
+            :animate="{ opacity: 1, x: 0 }"
+            :transition="{ delay: 0.3 }"
+          >
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <h3>{{ t('help.step4Title') }}</h3>
+              <p style="color: green;font-size: 22px;"> <b>{{ t('help.step4Description') }}</b></p>
+            </div>
+          </motion.div>
+
+
         </div>
 
         <BaseButton @click="emit('close')" variant="primary">
@@ -7195,6 +7831,239 @@ h2 {
 
 ================================================================================
 
+src/components/common/Toast.vue
+{code}
+<script setup>
+import { computed } from 'vue'
+
+const props = defineProps({
+  message: {
+    type: String,
+    required: true
+  },
+  type: {
+    type: String,
+    default: 'success' // success, error, info
+  },
+  duration: {
+    type: Number,
+    default: 3000
+  }
+})
+
+const emit = defineEmits(['close'])
+
+const icon = computed(() => {
+  switch (props.type) {
+    case 'success':
+      return '✓'
+    case 'error':
+      return '✕'
+    case 'info':
+      return 'ℹ'
+    default:
+      return '✓'
+  }
+})
+
+const toastClass = computed(() => {
+  return `toast toast-${props.type}`
+})
+
+// Auto close after duration
+if (props.duration > 0) {
+  setTimeout(() => {
+    emit('close')
+  }, props.duration)
+}
+</script>
+
+<template>
+  <div :class="toastClass">
+    <span class="toast-icon">{{ icon }}</span>
+    <span class="toast-message">{{ message }}</span>
+    <button class="toast-close" @click="$emit('close')">
+      ×
+    </button>
+  </div>
+</template>
+
+<style scoped>
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  color: white;
+  font-weight: 500;
+  font-size: 14px;
+  min-width: 300px;
+  max-width: 500px;
+  animation: slideIn 0.3s ease-out;
+}
+
+.toast-success {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.toast-error {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.toast-info {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.toast-icon {
+  font-size: 16px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.toast-message {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+}
+
+.toast-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+</style>
+{/code}
+
+================================================================================
+
+src/components/common/ToastContainer.vue
+{code}
+<script setup>
+import { ref } from 'vue'
+import Toast from './Toast.vue'
+
+const toasts = ref([])
+
+const showToast = (message, type = 'success', duration = 3000) => {
+  const id = Date.now()
+  toasts.value.push({
+    id,
+    message,
+    type,
+    duration
+  })
+
+  // Auto remove after duration + animation time
+  setTimeout(() => {
+    removeToast(id)
+  }, duration + 300)
+}
+
+const removeToast = (id) => {
+  const index = toasts.value.findIndex(toast => toast.id === id)
+  if (index > -1) {
+    toasts.value.splice(index, 1)
+  }
+}
+
+// Expose showToast function for global use
+defineExpose({
+  showToast
+})
+</script>
+
+<template>
+  <div class="toast-container">
+    <TransitionGroup name="toast-list" tag="div">
+      <Toast
+        v-for="toast in toasts"
+        :key="toast.id"
+        :message="toast.message"
+        :type="toast.type"
+        :duration="toast.duration"
+        @close="removeToast(toast.id)"
+      />
+    </TransitionGroup>
+  </div>
+</template>
+
+<style scoped>
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.toast-container > div {
+  pointer-events: auto;
+}
+
+/* Toast list animations */
+.toast-list-enter-active,
+.toast-list-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-list-enter-from {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+.toast-list-leave-to {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+.toast-list-move {
+  transition: transform 0.3s ease;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .toast-container {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+  }
+}
+</style>
+{/code}
+
+================================================================================
+
 src/components/reward/ScratchCard.vue
 {code}
 <script setup>
@@ -7620,6 +8489,1087 @@ const handleClaim = () => {
 
 ================================================================================
 
+src/components/scan/ExcitementChips.vue
+{code}
+<script setup>
+import { motion } from 'motion-v'
+</script>
+
+<template>
+  <motion.div
+    class="excitement-chips"
+    :initial="{ opacity: 0 }"
+    :animate="{ opacity: 1 }"
+    :transition="{ delay: 0.3 }"
+  >
+    <motion.div
+      class="chip"
+      :animate="{ scale: [1, 1.05, 1] }"
+      :transition="{ duration: 1.5, repeat: Infinity, delay: 0 }"
+    >
+      💵 Instant Cash
+    </motion.div>
+    <motion.div
+      class="chip"
+      :animate="{ scale: [1, 1.05, 1] }"
+      :transition="{ duration: 1.5, repeat: Infinity, delay: 0.3 }"
+    >
+      🎁 Free Gifts
+    </motion.div>
+    <motion.div
+      class="chip"
+      :animate="{ scale: [1, 1.05, 1] }"
+      :transition="{ duration: 1.5, repeat: Infinity, delay: 0.6 }"
+    >
+      🏆 Big Prizes
+    </motion.div>
+  </motion.div>
+</template>
+
+<style scoped>
+.excitement-chips {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.chip {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+@media (max-width: 640px) {
+  .excitement-chips {
+    gap: 8px;
+  }
+
+  .chip {
+    font-size: 11px;
+    padding: 5px 12px;
+  }
+}
+</style>
+{/code}
+
+================================================================================
+
+src/components/scan/GiftCarousel.vue
+{code}
+<script setup>
+import { motion } from 'motion-v'
+import { Swiper, SwiperSlide } from 'swiper/vue'
+import { Autoplay, EffectCoverflow } from 'swiper/modules'
+import 'swiper/css'
+import 'swiper/css/effect-coverflow'
+
+defineProps({
+  gifts: {
+    type: Array,
+    default: () => []
+  }
+})
+
+// Swiper modules
+const modules = [Autoplay, EffectCoverflow]
+</script>
+
+<template>
+  <motion.div
+    class="carousel-section"
+    :initial="{ opacity: 0, y: 20 }"
+    :animate="{ opacity: 1, y: 0 }"
+    :transition="{ duration: 0.6 }"
+  >
+    <Swiper
+      :modules="modules"
+      :slides-per-view="4"
+      :space-between="15"
+      :loop="true"
+      :autoplay="{
+        delay: 2000,
+        disableOnInteraction: false,
+      }"
+      :speed="1000"
+      :breakpoints="{
+        320: { slidesPerView: 2, spaceBetween: 10 },
+        480: { slidesPerView: 3, spaceBetween: 12 },
+        640: { slidesPerView: 4, spaceBetween: 15 }
+      }"
+      class="gifts-swiper"
+    >
+      <SwiperSlide v-for="gift in gifts" :key="gift.id">
+        <motion.div
+          class="gift-card"
+          :whileHover="{ scale: 1.05, y: -5 }"
+        >
+          <img :src="gift.image" :alt="gift.name" class="gift-image" />
+          <div class="gift-name">{{ gift.name }}</div>
+        </motion.div>
+      </SwiperSlide>
+    </Swiper>
+  </motion.div>
+</template>
+
+<style scoped>
+.carousel-section {
+  margin-bottom: 24px;
+  padding: 0 10px;
+}
+
+.gifts-swiper {
+  padding: 10px 0;
+}
+
+.gift-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  padding: 12px 8px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 2px solid rgba(255, 215, 0, 0.3);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.gift-image {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+  margin: 0 auto 6px auto;
+  display: block;
+}
+
+.gift-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .gift-image {
+    width: 100px;
+    height: 60px;
+  }
+
+  .gift-name {
+    font-size: 10px;
+  }
+}
+</style>
+{/code}
+
+================================================================================
+
+src/components/scan/PrizeBadge.vue
+{code}
+<script setup>
+import { motion } from 'motion-v'
+</script>
+
+<template>
+  <motion.div
+    class="prize-badge"
+    :animate="{
+      scale: [1, 1.1, 1],
+      rotate: [0, -5, 5, 0]
+    }"
+    :transition="{
+      duration: 2,
+      repeat: Infinity,
+      repeatDelay: 1
+    }"
+  >
+    <div class="badge-shine"></div>
+    <span class="badge-text">🎊 WIN AMAZING PRIZES! 🎊</span>
+  </motion.div>
+</template>
+
+<style scoped>
+.prize-badge {
+  position: relative;
+  display: inline-block;
+  background: linear-gradient(135deg, #ffd700, #ffed4e);
+  color: #000;
+  padding: 10px 20px;
+  border-radius: 50px;
+  font-size: 16px;
+  font-weight: 800;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(255, 215, 0, 0.6),
+              inset 0 2px 4px rgba(255, 255, 255, 0.5);
+  border: 3px solid #fff;
+  overflow: hidden;
+}
+
+.badge-shine {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  animation: shine 3s infinite;
+}
+
+@keyframes shine {
+  to { left: 200%; }
+}
+
+@media (max-width: 640px) {
+  .prize-badge {
+    font-size: 14px;
+    padding: 8px 16px;
+  }
+}
+</style>
+{/code}
+
+================================================================================
+
+src/components/scan/QRScannerModal.vue
+{code}
+<script setup>
+import { ref, computed } from 'vue'
+import { QrcodeStream } from 'vue-qrcode-reader'
+import { useLanguage } from '@/composables/useLanguage'
+
+const { t } = useLanguage()
+
+const props = defineProps({
+  show: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const emit = defineEmits(['detect', 'close'])
+
+const scannerError = ref('')
+const cameraReady = ref(false)
+
+// Enhanced camera constraints with autofocus
+const cameraConstraints = computed(() => ({
+  facingMode: 'environment',
+  advanced: [
+    { focusMode: 'continuous' },
+    { zoom: 1.0 }
+  ]
+}))
+
+// Handle successful QR detection
+const onDetect = (detectedCodes) => {
+  emit('detect', detectedCodes)
+}
+
+// Handle camera initialization and permissions
+const onScannerInit = async (promise) => {
+  scannerError.value = ''
+  try {
+    const { capabilities } = await promise
+    console.log('Camera initialized successfully', capabilities)
+
+    // Apply video constraints after camera is ready for better focus
+    if (capabilities) {
+      try {
+        // Additional focus optimization for mobile devices
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            focusMode: 'continuous',
+            zoom: true
+          }
+        })
+        console.log('Enhanced constraints applied')
+      } catch (constraintErr) {
+        console.warn('Could not apply enhanced constraints:', constraintErr)
+      }
+    }
+  } catch (err) {
+    console.error('Camera init error:', err)
+
+    if (err.name === 'NotAllowedError') {
+      scannerError.value = t('errors.cameraPermission') || 'Camera permission denied. Please allow camera access.'
+    } else if (err.name === 'NotFoundError') {
+      scannerError.value = t('errors.cameraNotFound') || 'No camera found on this device.'
+    } else if (err.name === 'NotSupportedError') {
+      scannerError.value = 'Secure context required (HTTPS or localhost).'
+    } else if (err.name === 'NotReadableError') {
+      scannerError.value = 'Camera already in use by another application.'
+    } else if (err.name === 'OverconstrainedError') {
+      scannerError.value = 'Camera does not meet requirements.'
+    } else if (err.name === 'StreamApiNotSupportedError') {
+      scannerError.value = 'Camera API not supported in this browser.'
+    } else if (err.name === 'InsecureContextError') {
+      scannerError.value = 'Camera access only allowed on HTTPS or localhost.'
+    } else {
+      scannerError.value = t('errors.cameraError') || err.message || 'Camera error occurred.'
+    }
+  }
+}
+
+// Handle scanner errors
+const onScannerError = (err) => {
+  console.error('Scanner error:', err)
+  scannerError.value = err.message || 'Scanner error occurred'
+}
+
+// Camera ready handler
+const onCameraReady = () => {
+  console.log('Camera stream is ready')
+  cameraReady.value = true
+  scannerError.value = ''
+}
+
+// Track function for visual feedback (helps with detection)
+const paintOutline = (detectedCodes, ctx) => {
+  for (const detectedCode of detectedCodes) {
+    const [firstPoint, ...otherPoints] = detectedCode.cornerPoints
+
+    ctx.strokeStyle = '#10b981'
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.moveTo(firstPoint.x, firstPoint.y)
+
+    for (const { x, y } of otherPoints) {
+      ctx.lineTo(x, y)
+    }
+
+    ctx.lineTo(firstPoint.x, firstPoint.y)
+    ctx.closePath()
+    ctx.stroke()
+
+    // Add a green fill with transparency
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.2)'
+    ctx.fill()
+  }
+}
+</script>
+
+<template>
+  <div v-if="show" class="scanner-modal">
+    <QrcodeStream
+      @detect="onDetect"
+      @init="onScannerInit"
+      @error="onScannerError"
+      @camera-on="onCameraReady"
+      :constraints="cameraConstraints"
+      :formats="['qr_code']"
+      :track="paintOutline"
+      class="scanner-video"
+    />
+
+    <button @click="$emit('close')" class="close-scanner-btn" aria-label="Close scanner">
+      ✕
+    </button>
+
+    <div class="scanner-overlay-content">
+      <div class="scanner-box">
+        <div class="scanner-corners">
+          <div class="corner corner-tl"></div>
+          <div class="corner corner-tr"></div>
+          <div class="corner corner-bl"></div>
+          <div class="corner corner-br"></div>
+        </div>
+        <div class="scanner-line"></div>
+      </div>
+
+      <div class="scanner-instructions">
+        <p v-if="!cameraReady" class="scanner-text loading-text">
+          {{ t('scan.initializingCamera') || 'Initializing camera...' }}
+        </p>
+        <p v-else class="scanner-text">
+          {{ t('scan.scannerPrompt') || 'Position QR code within the frame' }}
+        </p>
+      </div>
+
+      <div v-if="scannerError" class="scanner-error-display">
+        <span class="error-icon">⚠️</span>
+        {{ scannerError }}
+      </div>
+
+      <div v-if="cameraReady" class="scanner-status">
+        <span class="status-indicator active"></span>
+        <span class="status-text">Camera Active</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.scanner-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scanner-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.close-scanner-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 2002;
+  background: rgba(255, 255, 255, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  color: white;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font-size: 24px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.close-scanner-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+  transform: scale(1.1);
+}
+
+.scanner-overlay-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2001;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.scanner-box {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  border-radius: 24px;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(5px);
+  overflow: hidden;
+}
+
+.scanner-corners {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.corner {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border: 4px solid #10b981;
+  animation: corner-pulse 2s infinite;
+}
+
+.corner-tl {
+  top: 0;
+  left: 0;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 24px;
+}
+
+.corner-tr {
+  top: 0;
+  right: 0;
+  border-left: none;
+  border-bottom: none;
+  border-top-right-radius: 24px;
+}
+
+.corner-bl {
+  bottom: 0;
+  left: 0;
+  border-right: none;
+  border-top: none;
+  border-bottom-left-radius: 24px;
+}
+
+.corner-br {
+  bottom: 0;
+  right: 0;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 24px;
+}
+
+@keyframes corner-pulse {
+  0%, 100% {
+    opacity: 1;
+    border-color: #10b981;
+  }
+  50% {
+    opacity: 0.5;
+    border-color: #34d399;
+  }
+}
+
+.scanner-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #10b981, transparent);
+  box-shadow: 0 0 20px #10b981, 0 0 40px #10b981;
+  animation: scan-line 2s ease-in-out infinite;
+}
+
+@keyframes scan-line {
+  0% {
+    top: 0;
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+.scanner-instructions {
+  margin-top: 32px;
+  text-align: center;
+}
+
+.scanner-text {
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  padding: 12px 24px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.loading-text {
+  animation: pulse-text 1.5s infinite;
+}
+
+@keyframes pulse-text {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.scanner-error-display {
+  position: absolute;
+  bottom: 100px;
+  left: 20px;
+  right: 20px;
+  background: #ef4444;
+  color: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+  z-index: 2003;
+  pointer-events: all;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  animation: slide-up 0.3s ease-out;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.error-icon {
+  font-size: 20px;
+}
+
+.scanner-status {
+  position: absolute;
+  bottom: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 8px 16px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.status-indicator.active {
+  animation: blink-indicator 1.5s infinite;
+  box-shadow: 0 0 10px #10b981;
+}
+
+@keyframes blink-indicator {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.status-text {
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .scanner-box {
+    width: 240px;
+    height: 240px;
+  }
+
+  .corner {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+  }
+
+  .scanner-text {
+    font-size: 14px;
+    padding: 10px 20px;
+  }
+
+  .scanner-error-display {
+    font-size: 13px;
+    padding: 14px 18px;
+    left: 16px;
+    right: 16px;
+  }
+
+  .close-scanner-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    top: 16px;
+    right: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .scanner-box {
+    width: 220px;
+    height: 220px;
+  }
+
+  .scanner-text {
+    font-size: 13px;
+  }
+
+  .scanner-error-display {
+    font-size: 13px;
+  }
+}
+</style>
+{/code}
+
+================================================================================
+
+src/components/scan/ScanForm.vue
+{code}
+<script setup>
+import { ref, computed } from 'vue'
+import { motion } from 'motion-v'
+import { useLanguage } from '@/composables/useLanguage'
+import BaseButton from '@/components/common/BaseButton.vue'
+import BaseInput from '@/components/common/BaseInput.vue'
+
+const { t } = useLanguage()
+
+const props = defineProps({
+  scannedCode: {
+    type: String,
+    default: ''
+  },
+  error: {
+    type: String,
+    default: ''
+  },
+  loading: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const emit = defineEmits(['scan-qr', 'validate-code', 'login-click'])
+
+const honeypot = ref('')
+
+const isValidCode = computed(() => props.scannedCode.length === 12)
+</script>
+
+<template>
+  <motion.div
+    class="form-container"
+    :initial="{ opacity: 0, scale: 0.95 }"
+    :animate="{ opacity: 1, scale: 1 }"
+    :transition="{ duration: 0.6, delay: 0.4 }"
+  >
+    <div class="form-glow"></div>
+
+    <motion.button
+      class="scan-qr-button"
+      @click="$emit('scan-qr')"
+      :whileHover="{ scale: 1.02, backgroundColor: '#f0fdf4' }"
+      :whileTap="{ scale: 0.98 }"
+    >
+      <span class="scan-icon">📷</span>
+      <strong>{{ t('scan.scanButton') }}</strong>
+    </motion.button>
+
+    <div class="divider or-divider">
+      <span>{{ t('scan.orEnterCode') }}</span>
+    </div>
+
+    <input v-model="honeypot" type="text" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off" />
+
+    <div class="input-wrapper">
+      <BaseInput
+        v-model="scannedCode"
+        type="text"
+        :placeholder="t('scan.placeholder')"
+        maxlength="12"
+        :error="error"
+        style="text-transform: uppercase"
+      />
+    </div>
+
+    <motion.div
+      :whileHover="{ scale: 1.02 }"
+      :whileTap="{ scale: 0.98 }"
+    >
+      <BaseButton
+        @click="$emit('validate-code')"
+        :loading="loading"
+        :disabled="!isValidCode"
+        class="check-button"
+      >
+        <span v-if="!loading" class="button-content">
+          <span class="button-icon">🎯</span>
+          {{ t('scan.submit') }}
+          <span class="button-shine"></span>
+        </span>
+      </BaseButton>
+    </motion.div>
+
+    <div class="divider">
+      <span>{{ t('scan.loginPrompt') }}</span>
+    </div>
+
+    <motion.button
+      class="login-link"
+      @click="$emit('login-click')"
+      :whileHover="{ scale: 1.02, backgroundColor: '#f0fdf4' }"
+      :whileTap="{ scale: 0.98 }"
+    >
+      <span class="login-icon">👤</span>
+      <strong>{{ t('scan.loginButton') }}</strong>
+    </motion.button>
+  </motion.div>
+</template>
+
+<style scoped>
+.form-container {
+  position: relative;
+  background: rgba(255, 255, 255, 0.98);
+  padding: 32px 28px;
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3),
+              0 0 40px rgba(255, 215, 0, 0.3);
+  border: 3px solid rgba(255, 215, 0, 0.5);
+}
+
+.form-glow {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, #ffd700, #ff6b6b, #4ecdc4, #ffd700);
+  background-size: 400% 400%;
+  border-radius: 24px;
+  z-index: -1;
+  opacity: 0.6;
+  animation: glow-rotate 4s linear infinite;
+  filter: blur(8px);
+}
+
+@keyframes glow-rotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.scan-qr-button {
+  width: 100%;
+  padding: 14px;
+  background: white;
+  border: 3px solid #10b981;
+  border-radius: 12px;
+  color: #10b981;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  transition: all 0.3s ease;
+}
+
+.scan-qr-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+}
+
+.scan-icon {
+  font-size: 20px;
+}
+
+.divider.or-divider {
+  margin: 20px 0;
+}
+
+.input-wrapper {
+  margin-bottom: 18px;
+}
+
+.check-button {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  font-size: 18px;
+  font-weight: 800;
+  padding: 16px 32px;
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+}
+
+.button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+
+.button-icon {
+  font-size: 22px;
+  animation: bounce-icon 1s infinite;
+}
+
+@keyframes bounce-icon {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.button-shine {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  animation: button-shine 2s infinite;
+}
+
+@keyframes button-shine {
+  to { left: 200%; }
+}
+
+.divider {
+  position: relative;
+  text-align: center;
+  margin: 24px 0;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #e5e7eb, transparent);
+}
+
+.divider span {
+  position: relative;
+  background: white;
+  padding: 0 14px;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.login-link {
+  width: 100%;
+  padding: 14px;
+  background: white;
+  border: 3px solid #10b981;
+  border-radius: 12px;
+  color: #10b981;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+  transition: all 0.3s ease;
+}
+
+.login-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+}
+
+.login-icon {
+  font-size: 18px;
+}
+
+@media (max-width: 640px) {
+  .form-container {
+    padding: 28px 24px;
+  }
+
+  .check-button {
+    font-size: 16px;
+    padding: 14px 28px;
+  }
+}
+</style>
+{/code}
+
+================================================================================
+
+src/components/scan/WinnerShowcase.vue
+{code}
+<script setup>
+import { motion } from 'motion-v'
+</script>
+
+<template>
+  <motion.div
+    class="winner-showcase"
+    :initial="{ opacity: 0, y: 20 }"
+    :animate="{ opacity: 1, y: 0 }"
+    :transition="{ delay: 0.6 }"
+  >
+    <div class="winner-badge">🏅 Recent Winners</div>
+    <div class="winners-scroll">
+      <motion.div
+        class="winner-item"
+        :animate="{ x: [-300, 0] }"
+        :transition="{ duration: 20, repeat: Infinity, ease: 'linear' }"
+      >
+        <span>Raj K. won <strong>₹500</strong> 💰</span>
+        <span>Priya S. won <strong>Mixer</strong> 🥤</span>
+        <span>Amit P. won <strong>₹1000</strong> 💵</span>
+      </motion.div>
+    </div>
+  </motion.div>
+</template>
+
+<style scoped>
+.winner-showcase {
+  margin-top: 24px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  padding: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+}
+
+.winner-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffd700;
+  margin-bottom: 10px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.winners-scroll {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.winner-item {
+  display: inline-flex;
+  gap: 24px;
+}
+
+.winner-item span {
+  display: inline-block;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 14px;
+  background: rgba(255, 215, 0, 0.2);
+  border-radius: 8px;
+}
+
+.winner-item strong {
+  color: #ffd700;
+}
+</style>
+{/code}
+
+================================================================================
+
 src/composables/useAuth.js
 {code}
 // src/composables/useAuth.js
@@ -7681,6 +9631,47 @@ export function useLanguage() {
     changeLanguage,
     currentLanguage: languageStore.currentLanguage,
     availableLanguages: languageStore.availableLanguages
+  }
+}
+{/code}
+
+================================================================================
+
+src/composables/useToast.js
+{code}
+// src/composables/useToast.js
+let toastContainer = null
+
+export function setToastContainer(container) {
+  toastContainer = container
+}
+
+export function useToast() {
+  const showToast = (message, type = 'success', duration = 3000) => {
+    if (toastContainer && toastContainer.showToast) {
+      toastContainer.showToast(message, type, duration)
+    } else {
+      console.warn('Toast container not found. Make sure ToastContainer is properly set up in App.vue')
+    }
+  }
+
+  const showSuccess = (message, duration = 3000) => {
+    showToast(message, 'success', duration)
+  }
+
+  const showError = (message, duration = 4000) => {
+    showToast(message, 'error', duration)
+  }
+
+  const showInfo = (message, duration = 3000) => {
+    showToast(message, 'info', duration)
+  }
+
+  return {
+    showToast,
+    showSuccess,
+    showError,
+    showInfo
   }
 }
 {/code}
@@ -7781,7 +9772,10 @@ src/locales/bn.json
     "error": "ত্রুটি",
     "success": "সফলতা",
     "help": "সাহায্য",
-    "language": "ভাষা"
+    "language": "ভাষা",
+    "categories": "বিভাগ",
+    "back": "ফিরে যান",
+    "menu": "মেনু"
   },
   "languageSelect": {
     "title": "আপনার ভাষা চয়ন করুন",
@@ -7796,6 +9790,8 @@ src/locales/bn.json
     "step2Description": "প্যাকেটের ভিতরে বা বোতলে 12-সংখ্যার কোডটি দেখুন",
     "step3Title": "এন্টার করুন এবং জিতুন",
     "step3Description": "তাৎক্ষণিক ক্যাশব্যাক জিততে এবং বাম্পার পুরস্কার জেতার সুযোগ পেতে আপনার কোড লিখুন!",
+    "step4Title": "সাহায্যের জন্য",
+    "step4Description": "+91 89279 02193 নম্বরে কল করুন",
     "gotIt": "বুঝেছি!"
   },
   "scan": {
@@ -7819,8 +9815,8 @@ src/locales/bn.json
     "tickets": "লাকি ড্র টিকিট",
     "claim": "আপনার পুরস্কার দাবি করুন!",
     "scratchHere": "🎁 এখানে স্ক্র্যাচ করুন 🎁",
-    "ticketSingle": "+ ১টি লাকি ড্র টিকিট",
-    "ticketPlural": "+ {count}টি লাকি ড্র টিকিট",
+    "ticketSingle": "+ 1 টি লাকি ড্র টিকিট",
+    "ticketPlural": "+ {count} টি লাকি ড্র টিকিট",
     "prizeInfo": "মাইক্রোওভেন, ইন্ডাকশন কুকটপ এবং আরও অনেক কিছু জিততে!"
   },
   "auth": {
@@ -7866,13 +9862,111 @@ src/locales/bn.json
     "language": "ভাষা",
     "logout": "লগআউট"
   },
+  "cart": {
+    "cart": "কার্ট",
+    "empty": "আপনার কার্ট খালি",
+    "addItems": "শুরু করতে কিছু পণ্য যোগ করুন",
+    "total": "মোট",
+    "checkout": "চেকআউট",
+    "remove": "সরান",
+    "quantity": "পরিমাণ",
+    "price": "মূল্য",
+    "subtotal": "উপমোট",
+    "continueShopping": "কেনাকাটা চালিয়ে যান",
+    "addedToCart": "পণ্য সফলভাবে কার্টে যোগ করা হয়েছে!",
+    "addToCartError": "পণ্য কার্টে যোগ করতে ব্যর্থ",
+    "items": "কার্ট আইটেম",
+    "clearCart": "কার্ট খালি করুন",
+    "totalItems": "মোট আইটেম",
+    "totalAmount": "মোট পরিমাণ",
+    "walletBalance": "ওয়ালেট ব্যালেন্স",
+    "amountNeeded": "প্রয়োজনীয় পরিমাণ",
+    "remainingBalance": "অবশিষ্ট ব্যালেন্স",
+    "insufficientFunds": "অপর্যাপ্ত ওয়ালেট ব্যালেন্স",
+    "confirmCheckout": "চেকআউট নিশ্চিত করুন",
+    "deliveryNotes": "ডেলিভারি নোট (ঐচ্ছিক)",
+    "deliveryNotesPlaceholder": "কোন বিশেষ ডেলিভারি নির্দেশনা...",
+    "confirmOrder": "অর্ডার নিশ্চিত করুন",
+    "addressRequired": "শিপিং ঠিকানা প্রয়োজন",
+    "addressRequiredDesc": "আপনার শিপিং ঠিকানা প্রদান করুন",
+    "fullName": "পুরো নাম",
+    "fullNamePlaceholder": "আপনার পুরো নাম",
+    "addressLine1": "ঠিকানা লাইন 1",
+    "addressLine1Placeholder": "বাড়ি নম্বর, রাস্তার নাম",
+    "city": "শহর",
+    "cityPlaceholder": "আপনার শহর",
+    "state": "রাজ্য",
+    "statePlaceholder": "আপনার রাজ্য",
+    "pincode": "পিনকোড",
+    "pincodePlaceholder": "6-অঙ্কের পিনকোড",
+    "saveAddress": "ঠিকানা সংরক্ষণ করুন এবং চালিয়ে যান"
+  },
+  "orders": {
+    "title": "আমার অর্ডার",
+    "empty": "এখনও কোনো অর্ডার নেই",
+    "emptyDesc": "আপনি এখনও কোনো অর্ডার করেননি। আপনার অর্ডারগুলি এখানে দেখতে কেনাকাটা শুরু করুন!",
+    "orderNumber": "অর্ডার #",
+    "items": "আইটেম(গুলি)",
+    "viewDetails": "বিস্তারিত দেখুন",
+    "loading": "আপনার অর্ডার লোড হচ্ছে...",
+    "error": "অর্ডার লোড করতে ব্যর্থ"
+  },
+  "orderDetails": {
+    "back": "অর্ডারে ফিরে যান",
+    "orderInfo": "অর্ডারের তথ্য",
+    "orderDate": "অর্ডারের তারিখ",
+    "status": "স্ট্যাটাস",
+    "items": "অর্ডার আইটেম",
+    "summary": "অর্ডারের সারসংক্ষেপ",
+    "total": "মোট পরিমাণ",
+    "address": "শিপিং ঠিকানা",
+    "notes": "অর্ডার নোট",
+    "tracking": "ট্র্যাকিং নম্বর"
+  },
+  "wallet": {
+    "title": "আমার ওয়ালেট",
+    "currentBalance": "বর্তমান ব্যালেন্স",
+    "transactionHistory": "লেনদেনের ইতিহাস",
+    "noTransactions": "এখনও কোনো লেনদেন নেই",
+    "noTransactionsDesc": "আপনার লেনদেনের ইতিহাস এখানে দেখা যাবে।",
+    "loading": "লেনদেন লোড হচ্ছে...",
+    "error": "ওয়ালেট ডেটা লোড করতে ব্যর্থ"
+  },
+  "productDetails": {
+    "back": "পণ্যগুলিতে ফিরে যান",
+    "addToCart": "কার্টে যোগ করুন",
+    "redeemNow": "এখনই রিডিম করুন",
+    "outOfStock": "স্টক নেই",
+    "stock": "স্টক",
+    "mrp": "MRP",
+    "redemptionCost": "রিডেম্পশন খরচ",
+    "description": "বিবরণ",
+    "specifications": "স্পেসিফিকেশন",
+    "reviews": "রিভিউ"
+  },
+  "categoryDetails": {
+    "back": "দোকানে ফিরে যান",
+    "products": "পণ্য",
+    "noProducts": "এই বিভাগে কোনো পণ্য উপলব্ধ নেই।"
+  },
+  "menu": {
+    "myProfile": "আমার প্রোফাইল",
+    "shopNow": "এখনই কিনুন",
+    "myOrders": "আমার অর্ডার",
+    "wallet": "ওয়ালেট",
+    "redeemCodes": "কোড রিডিম করুন",
+    "logout": "লগআউট"
+  },
   "errors": {
     "network": "নেটওয়ার্ক ত্রুটি। অনুগ্রহ করে আপনার সংযোগ পরীক্ষা করুন।",
     "rateLimited": "অনেক প্রচেষ্টা। অনুগ্রহ করে পরে আবার চেষ্টা করুন।",
     "unknown": "কিছু ভুল হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।",
     "cameraPermission": "ক্যামেরার অনুমতি দেওয়া হয়নি। অনুগ্রহ করে আপনার ব্রাউজার সেটিংসে ক্যামেরার অনুমতি দিন।",
     "cameraNotFound": "এই ডিভাইসে কোনো ক্যামেরা খুঁজে পাওয়া যায়নি।",
-    "cameraError": "ক্যামেরা শুরু করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।"
+    "cameraError": "ক্যামেরা শুরু করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।",
+    "productNotFound": "পণ্যটি খুঁজে পাওয়া যায়নি।",
+    "categoryNotFound": "বিভাগটি খুঁজে পাওয়া যায়নি।",
+    "orderNotFound": "অর্ডারটি খুঁজে পাওয়া যায়নি।"
   }
 }
 {/code}
@@ -7893,7 +9987,10 @@ src/locales/en.json
     "error": "Error",
     "success": "Success",
     "help": "Help",
-    "language": "Language"
+    "language": "Language",
+    "categories": "Categories",
+    "back": "Back",
+    "menu": "Menu"
   },
   "languageSelect": {
     "title": "Choose Your Language",
@@ -7908,6 +10005,8 @@ src/locales/en.json
     "step2Description": "Look for the 12-digit code inside the packet or on bottles",
     "step3Title": "Enter & Win",
     "step3Description": "Enter your code to win instant cashback and a chance at bumper prizes!",
+      "step4Title": "For Help ",
+    "step4Description": "Call +91 89279 02193",
     "gotIt": "Got it!"
   },
   "scan": {
@@ -7948,7 +10047,8 @@ src/locales/en.json
     "changeNumber": "Change Number",
     "enterName": "What's your name?",
     "nameLabel": "Your Name",
-    "namePlaceholder": "Enter your name"
+    "namePlaceholder": "Enter your name",
+    "logout" : "Logout"
   },
   "dashboard": {
     "welcome": "Welcome",
@@ -7970,22 +10070,107 @@ src/locales/en.json
     "orderSuccess": "Order placed successfully!",
     "newBalance": "Your new balance"
   },
-  "profile": {
-    "title": "My Profile",
-    "phone": "Phone Number",
-    "name": "Name",
-    "address": "Shipping Address",
-    "language": "Language",
-    "logout": "Logout"
-  },
-  "errors": {
-    "network": "Network error. Please check your connection.",
-    "rateLimited": "Too many attempts. Please try again later.",
-    "unknown": "Something went wrong. Please try again.",
-    "cameraPermission": "Camera permission denied. Please allow camera access in your browser settings.",
-    "cameraNotFound": "No camera found on this device.",
-    "cameraError": "Could not initialize camera. Please try again."
-  }
+ "profile": {
+   "title": "My Profile",
+   "phone": "Phone Number",
+   "name": "Name",
+   "address": "Shipping Address",
+   "language": "Language",
+   "logout": "Logout"
+ },
+ "cart": {
+   "cart": "Cart",
+   "empty": "Your cart is empty",
+   "addItems": "Add some products to get started",
+   "total": "Total",
+   "checkout": "Checkout",
+   "remove": "Remove",
+   "quantity": "Quantity",
+   "price": "Price",
+   "clearCart": "Price",
+   "items": "Price",
+   "totalAmount": "Price",
+   "walletBalance": "Price",
+   "amountNeeded": "Price",
+   "insufficientFunds": "Price",
+   "deliveryNotes": "Price",
+   "remainingBalance": "Price",
+   "confirmCheckout": "Price",
+   "totalItems": "Total Items",
+   "summary" :"Order Summary",
+   "subtotal": "Subtotal",
+   "continueShopping": "Continue Shopping",
+   "addedToCart": "Product added to cart successfully!",
+   "addToCartError": "Failed to add product to cart"
+ },
+ "orders": {
+   "title": "My Orders",
+   "empty": "No Orders Yet",
+   "emptyDesc": "You haven't placed any orders yet. Start shopping to see your orders here!",
+   "orderNumber": "Order #",
+   "items": "item(s)",
+   "viewDetails": "View Details",
+   "loading": "Loading your orders...",
+   "error": "Failed to load orders",
+   "myOrders" : "My Orders"
+ },
+ "orderDetails": {
+   "back": "Back to Orders",
+   "orderInfo": "Order Information",
+   "orderDate": "Order Date",
+   "status": "Status",
+   "items": "Order Items",
+   "summary": "Order Summary",
+   "total": "Total Amount",
+   "address": "Shipping Address",
+   "notes": "Order Notes",
+   "tracking": "Tracking Number"
+ },
+ "wallet": {
+   "title": "My Wallet",
+   "currentBalance": "Current Balance",
+   "transactionHistory": "Transaction History",
+   "noTransactions": "No Transactions Yet",
+   "noTransactionsDesc": "Your transaction history will appear here.",
+   "loading": "Loading transactions...",
+   "error": "Failed to load wallet data"
+ },
+ "productDetails": {
+   "back": "Back to Products",
+   "addToCart": "Add to Cart",
+   "redeemNow": "Redeem Now",
+   "outOfStock": "Out of Stock",
+   "stock": "Stock",
+   "mrp": "MRP",
+   "redemptionCost": "Redemption Cost",
+   "description": "Description",
+   "specifications": "Specifications",
+   "reviews": "Reviews"
+ },
+ "categoryDetails": {
+   "back": "Back to Shop",
+   "products": "Products",
+   "noProducts": "No products available in this category."
+ },
+ "menu": {
+   "myProfile": "My Profile",
+   "shopNow": "Shop Now",
+   "myOrders": "My Orders",
+   "wallet": "Wallet",
+   "redeemCodes": "Redeem Codes",
+   "logout": "Logout"
+ },
+ "errors": {
+   "network": "Network error. Please check your connection.",
+   "rateLimited": "Too many attempts. Please try again later.",
+   "unknown": "Something went wrong. Please try again.",
+   "cameraPermission": "Camera permission denied. Please allow camera access in your browser settings.",
+   "cameraNotFound": "No camera found on this device.",
+   "cameraError": "Could not initialize camera. Please try again.",
+   "productNotFound": "Product not found.",
+   "categoryNotFound": "Category not found.",
+   "orderNotFound": "Order not found."
+ }
 }
 {/code}
 
@@ -8005,7 +10190,10 @@ src/locales/hi.json
     "error": "त्रुटि",
     "success": "सफलता",
     "help": "सहायता",
-    "language": "भाषा"
+    "language": "भाषा",
+    "categories": "श्रेणियाँ",
+    "back": "वापस",
+    "menu": "मेनू"
   },
   "languageSelect": {
     "title": "अपनी भाषा चुनें",
@@ -8020,6 +10208,8 @@ src/locales/hi.json
     "step2Description": "पैकेट के अंदर या बोतलों पर 12-अंकों का कोड देखें",
     "step3Title": "दर्ज करें और जीतें",
     "step3Description": "तुरंत कैशबैक जीतने और बंपर पुरस्कार जीतने का मौका पाने के लिए अपना कोड दर्ज करें!",
+    "step4Title": "सहायता के लिए",
+    "step4Description": "+91 89279 02193 पर कॉल करें",
     "gotIt": "समझ गया!"
   },
   "scan": {
@@ -8043,7 +10233,7 @@ src/locales/hi.json
     "tickets": "लकी ड्रॉ टिकट",
     "claim": "अपना इनाम क्लेम करें!",
     "scratchHere": "🎁 यहाँ स्क्रैच करें 🎁",
-    "ticketSingle": "+ १ लकी ड्रॉ टिकट",
+    "ticketSingle": "+ 1 लकी ड्रॉ टिकट",
     "ticketPlural": "+ {count} लकी ड्रॉ टिकट",
     "prizeInfo": "माइक्रोवेव, इंडक्शन कुकटॉप और बहुत कुछ जीतने के लिए!"
   },
@@ -8066,14 +10256,14 @@ src/locales/hi.json
     "welcome": "स्वागत है",
     "wallet": "आपका वॉलेट",
     "tickets": "आपके लकी ड्रॉ टिकट",
-    "redeemGifts": "उपहार रिडीম करें",
+    "redeemGifts": "उपहार रिडीम करें",
     "seePrizes": "मासिक पुरस्कार देखें",
     "scanAnother": "एक और कोड स्कैन करें"
   },
   "redeem": {
     "title": "रिवॉर्ड रिडीम करें",
     "yourBalance": "आपका बैलेंस",
-    "insufficientBalance": "अपर्याপ্ত बैलेंस",
+    "insufficientBalance": "अपर्याप्त बैलेंस",
     "selectProduct": "उत्पाद चुनें",
     "confirmRedemption": "रिडेम्पशन की पुष्टि करें",
     "redeemFor": "इसके लिए रिडीम करें",
@@ -8090,13 +10280,111 @@ src/locales/hi.json
     "language": "भाषा",
     "logout": "लॉगआउट"
   },
+  "cart": {
+    "cart": "कार्ट",
+    "empty": "आपकी कार्ट खाली है",
+    "addItems": "शुरू करने के लिए कुछ उत्पाद जोड़ें",
+    "total": "कुल",
+    "checkout": "चेकआउट",
+    "remove": "हटाएं",
+    "quantity": "मात्रा",
+    "price": "कीमत",
+    "subtotal": "उप-योग",
+    "continueShopping": "खरीदारी जारी रखें",
+    "addedToCart": "उत्पाद कार्ट में सफलतापूर्वक जोड़ा गया!",
+    "addToCartError": "उत्पाद कार्ट में जोड़ने में विफल",
+    "items": "कार्ट आइटम",
+    "clearCart": "कार्ट खाली करें",
+    "totalItems": "कुल आइटम",
+    "totalAmount": "कुल राशि",
+    "walletBalance": "वॉलेट बैलेंस",
+    "amountNeeded": "आवश्यक राशि",
+    "remainingBalance": "शेष राशि",
+    "insufficientFunds": "अपर्याप्त वॉलेट बैलेंस",
+    "confirmCheckout": "चेकआउट की पुष्टि करें",
+    "deliveryNotes": "डिलीवरी नोट्स (वैकल्पिक)",
+    "deliveryNotesPlaceholder": "कोई विशेष डिलीवरी निर्देश...",
+    "confirmOrder": "ऑर्डर की पुष्टि करें",
+    "addressRequired": "शिपिंग पता आवश्यक",
+    "addressRequiredDesc": "अपना शिपिंग पता प्रदान करें",
+    "fullName": "पूरा नाम",
+    "fullNamePlaceholder": "आपका पूरा नाम",
+    "addressLine1": "पता लाइन 1",
+    "addressLine1Placeholder": "घर संख्या, सड़क का नाम",
+    "city": "शहर",
+    "cityPlaceholder": "आपका शहर",
+    "state": "राज्य",
+    "statePlaceholder": "आपका राज्य",
+    "pincode": "पिनकोड",
+    "pincodePlaceholder": "6-अंकों का पिनकोड",
+    "saveAddress": "पता सहेजें और जारी रखें"
+  },
+  "orders": {
+    "title": "मेरे ऑर्डर्स",
+    "empty": "अभी तक कोई आर्डर नहीं",
+    "emptyDesc": "आपने अभी तक कोई आर्डर नहीं दिया है। अपने आर्डर यहाँ देखने के लिए खरीदारी शुरू करें!",
+    "orderNumber": "आर्डर #",
+    "items": "आइटम",
+    "viewDetails": "विवरण देखें",
+    "loading": "आपके आर्डर लोड हो रहे हैं...",
+    "error": "आर्डर लोड करने में विफल"
+  },
+  "orderDetails": {
+    "back": "ऑर्डर्स पर वापस जाएं",
+    "orderInfo": "आर्डर की जानकारी",
+    "orderDate": "आर्डर की तारीख",
+    "status": "स्थिति",
+    "items": "आर्डर आइटम्स",
+    "summary": "आर्डर सारांश",
+    "total": "कुल राशि",
+    "address": "शिपिंग पता",
+    "notes": "आर्डर नोट्स",
+    "tracking": "ट्रैकिंग नंबर"
+  },
+  "wallet": {
+    "title": "मेरा वॉलेट",
+    "currentBalance": "वर्तमान शेष",
+    "transactionHistory": "लेन-देन का इतिहास",
+    "noTransactions": "अभी तक कोई लेन-देन नहीं",
+    "noTransactionsDesc": "आपका लेन-देन का इतिहास यहाँ दिखाई देगा।",
+    "loading": "लेन-देन लोड हो रहे हैं...",
+    "error": "वॉलेट डेटा लोड करने में विफल"
+  },
+  "productDetails": {
+    "back": "उत्पादों पर वापस जाएं",
+    "addToCart": "कार्ट में जोड़ें",
+    "redeemNow": "अभी रिडीम करें",
+    "outOfStock": "स्टॉक में नहीं है",
+    "stock": "स्टॉक",
+    "mrp": "MRP",
+    "redemptionCost": "रिडेम्पशन लागत",
+    "description": "विवरण",
+    "specifications": "विनिर्देश",
+    "reviews": "समीक्षाएं"
+  },
+  "categoryDetails": {
+    "back": "दुकान पर वापस जाएं",
+    "products": "उत्पाद",
+    "noProducts": "इस श्रेणी में कोई उत्पाद उपलब्ध नहीं है।"
+  },
+  "menu": {
+    "myProfile": "मेरी प्रोफाइल",
+    "shopNow": "अभी खरीदें",
+    "myOrders": "मेरे ऑर्डर्स",
+    "wallet": "वॉलेट",
+    "redeemCodes": "कोड रिडीम करें",
+    "logout": "लॉगआउट"
+  },
   "errors": {
     "network": "नेटवर्क त्रुटि। कृपया अपना कनेक्शन जांचें।",
     "rateLimited": "बहुत सारे प्रयास। कृपया बाद में पुनः प्रयास करें।",
     "unknown": "कुछ गलत हो गया। कृपया पुनः प्रयास करें।",
     "cameraPermission": "कैमरे की अनुमति अस्वीकार कर दी गई। कृपया अपनी ब्राउज़र सेटिंग में कैमरे की अनुमति दें।",
     "cameraNotFound": "इस डिवाइस पर कोई कैमरा नहीं मिला।",
-    "cameraError": "कैमरा शुरू नहीं किया जा सका। कृपया पुनः प्रयास करें।"
+    "cameraError": "कैमरा शुरू नहीं किया जा सका। कृपया पुनः प्रयास करें।",
+    "productNotFound": "उत्पाद नहीं मिला।",
+    "categoryNotFound": "श्रेणी नहीं मिली।",
+    "orderNotFound": "आर्डर नहीं मिला।"
   }
 }
 {/code}
@@ -8121,9 +10409,10 @@ import bn from './locales/bn.json'
 console.log('Starting app initialization...')
 
 // Create i18n instance
+const savedLanguage = localStorage.getItem('user_language')
 const i18n = createI18n({
   legacy: false,
-  locale: localStorage.getItem('user_language') || 'en',
+  locale: savedLanguage || 'en', // Initialize with saved language
   fallbackLocale: 'en',
   messages: { en, hi, bn },
   globalInjection: true
@@ -8182,6 +10471,42 @@ const routes = [
     path: '/redeem',
     name: 'redeem',
     component: () => import('@/views/RedeemPage.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/product/:id',
+    name: 'product-details',
+    component: () => import('@/views/ProductDetails.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/category/:slug',
+    name: 'category-details',
+    component: () => import('@/views/CategoryDetails.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/orders',
+    name: 'orders',
+    component: () => import('@/views/OrdersPage.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/wallet',
+    name: 'wallet',
+    component: () => import('@/views/WalletPage.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/order/:id',
+    name: 'order-details',
+    component: () => import('@/views/OrderDetailsPage.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/cart',
+    name: 'cart',
+    component: () => import('@/views/CartPage.vue'),
     meta: { requiresAuth: true }
   },
   {
@@ -8292,7 +10617,16 @@ export const useAuthStore = defineStore('auth', {
     async updateAddress(address) {
       try {
         const response = await profileAPI.updateAddress(address)
-        this.user.shipping_address = address
+        this.user.shipping_address = {
+          line1: address.line1,
+          city: address.city,
+          state: address.state,
+          pincode: address.pincode
+        }
+        // Update name if provided
+        if (address.name) {
+          this.user.name = address.name
+        }
         return { success: true }
       } catch (error) {
         return { success: false, error: error.message }
@@ -8316,6 +10650,104 @@ export const useAuthStore = defineStore('auth', {
 
 ================================================================================
 
+src/stores/cart.js
+{code}
+// src/stores/cart.js
+import { defineStore } from 'pinia'
+import { cartAPI } from '@/api/endpoints'
+
+export const useCartStore = defineStore('cart', {
+  state: () => ({
+    cart: null,
+    loading: false
+  }),
+
+  getters: {
+    items: (state) => state.cart?.items || [],
+    itemCount: (state) => state.cart?.total_items || 0,
+    totalAmount: (state) => state.cart?.cart_total || 0,
+    walletBalance: (state) => parseFloat(state.cart?.wallet_balance || 0),
+    canCheckout: (state) => state.cart?.can_checkout || false,
+    insufficientFunds: (state) => state.cart?.insufficient_funds || false,
+    requiredAmount: (state) => state.cart?.required_amount || 0,
+    isEmpty: (state) => !state.cart?.items?.length,
+    formattedTotal: (state) => `₹${(state.cart?.cart_total || 0).toFixed(2)}`,
+    formattedWalletBalance: (state) => `₹${(state.cart?.wallet_balance || 0)}`
+  },
+
+  actions: {
+    async fetchCart() {
+      this.loading = true
+      try {
+        const response = await cartAPI.getCart()
+        this.cart = response.cart || null
+      } catch (error) {
+        console.error('Failed to fetch cart:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async addToCart(productId, quantity = 1) {
+      try {
+        await cartAPI.addToCart(productId, quantity)
+        await this.fetchCart() // Refresh cart data
+      } catch (error) {
+        console.error('Failed to add to cart:', error)
+        throw error
+      }
+    },
+
+    async updateQuantity(cartItemId, quantity) {
+      try {
+        await cartAPI.updateCartItem(cartItemId, quantity)
+        await this.fetchCart() // Refresh cart data
+      } catch (error) {
+        console.error('Failed to update cart item:', error)
+        throw error
+      }
+    },
+
+    async removeItem(cartItemId) {
+      try {
+        await cartAPI.removeCartItem(cartItemId)
+        await this.fetchCart() // Refresh cart data
+      } catch (error) {
+        console.error('Failed to remove cart item:', error)
+        throw error
+      }
+    },
+
+    async clearCart() {
+      try {
+        await cartAPI.clearCart()
+        this.items = []
+        this.totalItems = 0
+        this.totalAmount = 0
+      } catch (error) {
+        console.error('Failed to clear cart:', error)
+        throw error
+      }
+    },
+
+    async checkout(notes = null) {
+      try {
+        const response = await cartAPI.checkoutCart(notes)
+        // Clear cart after successful checkout
+        this.cart = null
+        return response
+      } catch (error) {
+        console.error('Failed to checkout:', error)
+        throw error
+      }
+    }
+  }
+})
+{/code}
+
+================================================================================
+
 src/stores/language.js
 {code}
 // src/stores/language.js
@@ -8323,7 +10755,7 @@ import { defineStore } from 'pinia'
 
 export const useLanguageStore = defineStore('language', {
   state: () => ({
-    currentLanguage: 'en',
+    currentLanguage: localStorage.getItem('user_language') || 'en',
     availableLanguages: [
       { code: 'en', name: 'English', nativeName: 'English' },
       { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी' },
@@ -8348,17 +10780,18 @@ export const useLanguageStore = defineStore('language', {
     detectBrowserLanguage() {
       const browserLang = navigator.language.split('-')[0]
       const supported = this.availableLanguages.find(l => l.code === browserLang)
-      
+
       if (supported) {
         this.setLanguage(browserLang)
       }
     }
   },
 
-  persist: {
-    key: 'nirva_language',
-    paths: ['currentLanguage']
-  }
+  // Remove persist to avoid conflicts with manual language loading
+  // persist: {
+  //   key: 'nirva_language',
+  //   paths: ['currentLanguage']
+  // }
 })
 {/code}
 
@@ -8506,6 +10939,1197 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+{/code}
+
+================================================================================
+
+src/views/CartPage.vue
+{code}
+<script setup>
+import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { motion, AnimatePresence } from 'motion-v'
+
+// IMPORTS REMOVED:
+// 'useAuthStore', 'useWalletStore', and 'useLanguage' are
+// auto-imported by 'unplugin-auto-import' (see vite.config.js)
+import { useCartStore } from '@/stores/cart'
+
+// Import Common Components
+import GlobalHeader from '@/components/common/GlobalHeader.vue'
+import HelpModal from '@/components/common/HelpModal.vue'
+import LanguageModal from '@/components/common/LanguageModal.vue'
+import BaseButton from '@/components/common/BaseButton.vue'
+import BaseInput from '@/components/common/BaseInput.vue'
+
+// --- Initialize Stores, Router, and Composables ---
+const router = useRouter()
+const authStore = useAuthStore() // This now works globally
+const walletStore = useWalletStore() // This now works globally
+const cartStore = useCartStore()
+const { t } = useLanguage() // This now works globally
+
+// --- Page State ---
+const showHelpModal = ref(false)
+const showLanguageModal = ref(false)
+const showCheckoutModal = ref(false)
+const showAddressModal = ref(false)
+const checkoutNotes = ref('')
+const checkingOut = ref(false)
+const addressError = ref('')
+
+// --- Computed Properties ---
+const canCheckout = computed(() => cartStore.canCheckout)
+const insufficientFunds = computed(() => cartStore.insufficientFunds)
+const requiredAmount = computed(() => cartStore.requiredAmount)
+
+// Address form state, pre-filled if user data exists
+const address = ref({
+  name: authStore.user?.name || '',
+  line1: authStore.user?.shipping_address?.line1 || '',
+  city: authStore.user?.shipping_address?.city || '',
+  state: authStore.user?.shipping_address?.state || '',
+  pincode: authStore.user?.shipping_address?.pincode || ''
+})
+
+// --- Lifecycle ---
+onMounted(async () => {
+  await cartStore.fetchCart()
+})
+
+// --- Methods ---
+const updateQuantity = async (cartItemId, newQuantity) => {
+  if (newQuantity < 1) return
+  try {
+    await cartStore.updateQuantity(cartItemId, newQuantity)
+  } catch (error) {
+    console.error('Failed to update quantity:', error)
+  }
+}
+
+const removeItem = async (cartItemId) => {
+  try {
+    await cartStore.removeItem(cartItemId)
+  } catch (error) {
+    console.error('Failed to remove item:', error)
+  }
+}
+
+const clearCart = async () => {
+  try {
+    await cartStore.clearCart()
+  } catch (error) {
+    console.error('Failed to clear cart:', error)
+  }
+}
+
+const initiateCheckout = () => {
+  if (!canCheckout.value) return
+  showCheckoutModal.value = true
+}
+
+const confirmCheckout = async () => {
+  checkingOut.value = true
+  try {
+    const response = await cartStore.checkout(checkoutNotes.value || null)
+    // Update wallet balance
+    walletStore.syncWallet({
+      balance: response.new_wallet_balance,
+      lucky_draw_tickets: walletStore.ticketCount
+    })
+    showCheckoutModal.value = false
+    checkoutNotes.value = ''
+    // Redirect to success page or show success message
+    router.push('/dashboard')
+  } catch (error) {
+    console.error('Checkout failed:', error)
+
+    // Handle specific error messages
+    if (error.message?.includes('shipping address')) {
+      showCheckoutModal.value = false
+      showAddressModal.value = true
+    } else if (error.message?.includes('Cart is empty')) {
+      // Cart became empty, refresh cart
+      await cartStore.fetchCart()
+    } else if (error.message?.includes('Insufficient wallet balance')) {
+      // Refresh cart to get updated balance
+      await cartStore.fetchCart()
+    }
+    // Other errors are handled by the global error handler
+  } finally {
+    checkingOut.value = false
+  }
+}
+
+const handleAddressSubmit = async () => {
+  checkingOut.value = true
+  addressError.value = ''
+  try {
+    // Update address and name
+    const result = await authStore.updateAddress({
+      name: address.value.name,
+      line1: address.value.line1,
+      city: address.value.city,
+      state: address.value.state,
+      pincode: address.value.pincode
+    })
+
+    if (result.success) {
+      showAddressModal.value = false
+      // Retry checkout after address is saved
+      await confirmCheckout()
+    } else {
+      addressError.value = result.error || t('errors.unknown')
+    }
+  } catch (error) {
+    console.error('Failed to update address:', error)
+    addressError.value = error.message || t('errors.unknown')
+  } finally {
+    checkingOut.value = false
+  }
+}
+
+const goBack = () => router.back()
+</script>
+
+<template>
+  <div class="cart-page">
+    <GlobalHeader
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+
+    <div class="content">
+      <motion.div
+        class="back-button-container"
+        :initial="{ opacity: 0, x: -20 }"
+        :animate="{ opacity: 1, x: 0 }"
+      >
+        <BaseButton @click="goBack" variant="secondary" size="small">
+          ← {{ t('common.back') }}
+        </BaseButton>
+      </motion.div>
+
+      <motion.h1
+        class="page-title"
+        :initial="{ opacity: 0, y: -20 }"
+        :animate="{ opacity: 1, y: 0 }"
+      >
+        {{ t('cart.cart') }}
+      </motion.h1>
+
+      <motion.div
+        class="wallet-card card"
+        :initial="{ opacity: 0, scale: 0.9 }"
+        :animate="{ opacity: 1, scale: 1 }"
+        :transition="{ delay: 0.1 }"
+      >
+        <span class="wallet-label">{{ t('redeem.yourBalance') }}</span>
+        <h2 class="wallet-balance">{{ cartStore.formattedWalletBalance }}</h2>
+      </motion.div>
+
+      <div v-if="cartStore.loading" class="loading">
+        <div class="spinner"></div>
+        <p>{{ t('common.loading') }}</p>
+      </div>
+
+      <div v-else-if="cartStore.isEmpty" class="empty-cart">
+        <motion.div
+          class="empty-cart-content"
+          :initial="{ opacity: 0, scale: 0.9 }"
+          :animate="{ opacity: 1, scale: 1 }"
+        >
+          <div class="empty-cart-icon">🛒</div>
+          <h2>{{ t('cart.empty') }}</h2>
+          <p>{{ t('cart.addItems') }}</p>
+          <BaseButton @click="router.push('/redeem')" variant="primary">
+            {{ t('cart.continueShopping') }}
+          </BaseButton>
+        </motion.div>
+      </div>
+
+      <div v-else class="cart-content">
+        <motion.div
+          class="cart-items"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ delay: 0.2 }"
+        >
+          <div class="cart-header">
+            <h2>{{ t('cart.items') }} ({{ cartStore.itemCount }})</h2>
+            <BaseButton @click="clearCart" variant="danger" size="small">
+              {{ t('cart.clearCart') }}
+            </BaseButton>
+          </div>
+
+          <div class="items-list">
+            <motion.div
+              v-for="(item, index) in cartStore.items"
+              :key="item.cart_item_id"
+              class="cart-item card"
+              :initial="{ opacity: 0, x: -20 }"
+              :animate="{ opacity: 1, x: 0 }"
+              :transition="{ delay: 0.3 + index * 0.1 }"
+            >
+              <div class="item-image">
+                <img :src="item.images[0]?.medium" :alt="item.product_name" />
+              </div>
+              <div class="item-details">
+                <h3 class="item-name">{{ item.brand }} - {{ item.product_name }}</h3>
+                <p v-if="item.variant_name" class="item-variant">{{ item.variant_name }}</p>
+                <p class="item-price">₹{{ item.price_per_item }} each</p>
+                <p v-if="!item.is_available" class="availability-message">{{ item.availability_message }}</p>
+              </div>
+              <div class="item-actions">
+                <div class="quantity-controls">
+                  <BaseButton @click="updateQuantity(item.cart_item_id, item.quantity - 1)" size="small" variant="secondary">-</BaseButton>
+                  <span class="quantity">{{ item.quantity }}</span>
+                  <BaseButton @click="updateQuantity(item.cart_item_id, item.quantity + 1)" size="small" variant="secondary">+</BaseButton>
+                </div>
+                <p class="item-total">₹{{ item.subtotal.toFixed(2) }}</p>
+                <BaseButton @click="removeItem(item.cart_item_id)" variant="danger" size="small">
+                  Remove
+                </BaseButton>
+              </div>
+            </motion.div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          class="cart-summary card"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ delay: 0.4 }"
+        >
+          <h3>{{ t('cart.summary') }}</h3>
+          <div class="summary-row">
+            <span>{{ t('cart.totalItems') }}:</span>
+            <span>{{ cartStore.itemCount }}</span>
+          </div>
+          <div class="summary-row total-row">
+            <span>{{ t('cart.totalAmount') }}:</span>
+            <span>{{ cartStore.formattedTotal }}</span>
+          </div>
+          <div class="summary-row">
+            <span>{{ t('cart.walletBalance') }}:</span>
+            <span>{{ cartStore.formattedWalletBalance }}</span>
+          </div>
+          <div v-if="insufficientFunds" class="summary-row insufficient">
+            <span>{{ t('cart.amountNeeded') }}:</span>
+            <span>₹{{ requiredAmount.toFixed(2) }}</span>
+          </div>
+          <div v-else class="summary-row">
+            <span>{{ t('cart.remainingBalance') }}:</span>
+            <span>₹{{ (cartStore.walletBalance - cartStore.totalAmount).toFixed(2) }}</span>
+          </div>
+
+          <div v-if="!canCheckout" class="checkout-warning">
+            <p>⚠️ {{ t('cart.insufficientFunds') }}</p>
+          </div>
+
+          <BaseButton
+            @click="initiateCheckout"
+            :disabled="!canCheckout"
+            size="large"
+            class="checkout-button"
+          >
+            {{ t('cart.checkout') }}
+          </BaseButton>
+        </motion.div>
+      </div>
+    </div>
+
+    <HelpModal
+      :show="showHelpModal"
+      @close="showHelpModal = false"
+    />
+    <LanguageModal
+      :show="showLanguageModal"
+      @close="showLanguageModal = false"
+    />
+
+    <AnimatePresence>
+      <motion.div
+        v-if="showAddressModal"
+        class="modal-overlay"
+        :initial="{ opacity: 0 }"
+        :animate="{ opacity: 1 }"
+        :exit="{ opacity: 0 }"
+        @click.self="showAddressModal = false"
+      >
+        <motion.div
+          class="modal-content"
+          :initial="{ scale: 0.9, opacity: 0 }"
+          :animate="{ scale: 1, opacity: 1 }"
+          :exit="{ scale: 0.9, opacity: 0 }"
+        >
+          <h2>{{ t('cart.addressRequired') }}</h2>
+          <p>{{ t('cart.addressRequiredDesc') }}</p>
+          <form @submit.prevent="handleAddressSubmit" class="address-form">
+            <BaseInput
+              v-model="address.name"
+              :label="t('cart.fullName')"
+              :placeholder="t('cart.fullNamePlaceholder')"
+              required
+            />
+            <BaseInput
+              v-model="address.line1"
+              :label="t('cart.addressLine1')"
+              :placeholder="t('cart.addressLine1Placeholder')"
+              required
+            />
+            <BaseInput
+              v-model="address.city"
+              :label="t('cart.city')"
+              :placeholder="t('cart.cityPlaceholder')"
+              required
+            />
+            <BaseInput
+              v-model="address.state"
+              :label="t('cart.state')"
+              :placeholder="t('cart.statePlaceholder')"
+              required
+            />
+            <BaseInput
+              v-model="address.pincode"
+              :label="t('cart.pincode')"
+              :placeholder="t('cart.pincodePlaceholder')"
+              type="tel"
+              maxlength="6"
+              required
+            />
+            <div v-if="addressError" class="error-message">
+              {{ addressError }}
+            </div>
+            <BaseButton
+              type="submit"
+              :loading="checkingOut"
+            >
+              {{ t('cart.saveAddress') }}
+            </BaseButton>
+          </form>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+
+    <AnimatePresence>
+      <motion.div
+        v-if="showCheckoutModal"
+        class="modal-overlay"
+        :initial="{ opacity: 0 }"
+        :animate="{ opacity: 1 }"
+        :exit="{ opacity: 0 }"
+        @click.self="showCheckoutModal = false"
+      >
+        <motion.div
+          class="modal-content"
+          :initial="{ scale: 0.9, opacity: 0 }"
+          :animate="{ scale: 1, opacity: 1 }"
+          :exit="{ scale: 0.9, opacity: 0 }"
+        >
+          <h2>{{ t('cart.confirmCheckout') }}</h2>
+          <div class="checkout-summary">
+            <p><strong>{{ t('cart.totalItems') }}:</strong> {{ cartStore.itemCount }}</p>
+            <p><strong>{{ t('cart.totalAmount') }}:</strong> {{ cartStore.formattedTotal }}</p>
+            <p><strong>{{ t('cart.remainingBalance') }}:</strong> ₹{{ (cartStore.walletBalance - cartStore.totalAmount).toFixed(2) }}</p>
+          </div>
+
+          <div class="checkout-form">
+            <BaseInput
+              v-model="checkoutNotes"
+              :label="t('cart.deliveryNotes')"
+              :placeholder="t('cart.deliveryNotesPlaceholder')"
+              type="textarea"
+              rows="3"
+            />
+          </div>
+
+          <div class="modal-actions">
+            <BaseButton
+              @click="showCheckoutModal = false"
+              variant="secondary"
+              :disabled="checkingOut"
+            >
+              {{ t('common.cancel') }}
+            </BaseButton>
+            <BaseButton
+              @click="confirmCheckout"
+              :loading="checkingOut"
+            >
+              {{ t('cart.confirmOrder') }}
+            </BaseButton>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  </div>
+</template>
+
+<style scoped>
+.cart-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  width: 100%;
+}
+
+.back-button-container {
+  margin-bottom: 20px;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.wallet-card {
+  padding: 20px 24px;
+  text-align: center;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  margin-bottom: 20px;
+}
+
+.wallet-label {
+  font-size: 16px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.wallet-balance {
+  font-size: 40px;
+  font-weight: 800;
+  margin: 4px 0 0 0;
+}
+
+.loading, .empty-cart {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(16, 185, 129, 0.2);
+  border-top-color: #10b981;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.empty-cart-content {
+  text-align: center;
+}
+
+.empty-cart-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.cart-content {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+}
+
+.cart-items {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.cart-header h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cart-item {
+  padding: 16px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.item-image {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.item-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.item-details {
+  flex: 1;
+}
+
+.item-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 4px 0;
+}
+
+.item-variant {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0 0 4px 0;
+}
+
+.item-price {
+  font-size: 14px;
+  color: #374151;
+  margin: 0;
+}
+
+.availability-message {
+  font-size: 12px;
+  color: #ef4444;
+  margin: 4px 0 0 0;
+  font-weight: 500;
+}
+
+.item-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.quantity-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quantity {
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 30px;
+  text-align: center;
+}
+
+.item-total {
+  font-size: 16px;
+  font-weight: 700;
+  color: #10b981;
+  margin: 0;
+}
+
+.cart-summary {
+  padding: 20px;
+  height: fit-content;
+  position: sticky;
+  top: 20px;
+}
+
+.cart-summary h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 16px 0;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.total-row {
+  font-size: 16px;
+  font-weight: 600;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.insufficient {
+  color: #ef4444;
+}
+
+.checkout-warning {
+  background: #fef2f2;
+  color: #dc2626;
+  padding: 12px;
+  border-radius: 6px;
+  margin: 16px 0;
+  font-size: 14px;
+  text-align: center;
+}
+
+.checkout-button {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.checkout-summary {
+  background: #f9fafb;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.checkout-summary p {
+  margin: 8px 0;
+}
+
+.checkout-form {
+  margin-bottom: 24px;
+}
+
+.address-form {
+  text-align: left;
+}
+
+.address-form .base-button {
+  margin-top: 8px;
+}
+
+.address-form .error-message {
+  margin-top: 0;
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+.modal-content h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+@media (max-width: 768px) {
+  .cart-content {
+    grid-template-columns: 1fr;
+  }
+
+  .cart-summary {
+    position: static;
+  }
+
+  .cart-item {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .item-actions {
+    align-items: center;
+  }
+}
+</style>
+{/code}
+
+================================================================================
+
+src/views/CategoryDetails.vue
+{code}
+<script setup>
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { motion } from 'motion-v'
+
+// IMPORTS REMOVED:
+// 'useAuthStore', 'useWalletStore', and 'useLanguage' are
+// auto-imported by 'unplugin-auto-import' (see vite.config.js)
+import { shopAPI } from '@/api/endpoints'
+import { useToast } from '@/composables/useToast'
+import { useCartStore } from '@/stores/cart'
+
+// Import Common Components
+import GlobalHeader from '@/components/common/GlobalHeader.vue'
+import HelpModal from '@/components/common/HelpModal.vue'
+import LanguageModal from '@/components/common/LanguageModal.vue'
+import BaseButton from '@/components/common/BaseButton.vue'
+
+// --- Initialize Stores, Router, and Composables ---
+const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore() // This now works globally
+const walletStore = useWalletStore() // This now works globally
+const cartStore = useCartStore()
+const { t, locale } = useLanguage() // This now works globally
+const toast = useToast()
+
+// --- Page State ---
+const loadingCategory = ref(true)
+const category = ref(null)
+const error = ref('')
+
+// --- Cart State ---
+const addingToCart = ref(null)
+
+// --- Modal State ---
+const showHelpModal = ref(false)
+const showLanguageModal = ref(false)
+
+// --- Computed Properties ---
+const walletBalance = computed(() => walletStore.balance)
+const formattedBalance = computed(() => walletStore.formattedBalance)
+
+// --- Data Fetching ---
+const fetchCategory = async () => {
+  loadingCategory.value = true
+  error.value = ''
+  try {
+    const response = await shopAPI.getCategory(route.params.slug, locale.value)
+    category.value = response.category || response
+  } catch (err) {
+    console.error('Failed to fetch category:', err)
+    // Check if error response contains category data (API returns 404 but includes data)
+    if (err.response?.data?.category) {
+      category.value = err.response.data.category
+      error.value = '' // Clear error since we have data
+    } else {
+      error.value = err.message || t('errors.network')
+    }
+  } finally {
+    loadingCategory.value = false
+  }
+}
+
+// Fetch category on mount and when language changes
+onMounted(fetchCategory)
+watch(locale, fetchCategory)
+
+// --- Methods ---
+const addToCart = async (productId, event) => {
+  event.stopPropagation() // Prevent card click
+  addingToCart.value = productId
+
+  try {
+    await cartStore.addToCart(productId, 1)
+    toast.showSuccess(t('cart.addedToCart'))
+  } catch (error) {
+    console.error('Failed to add to cart:', error)
+    toast.showError(t('cart.addToCartError'))
+  } finally {
+    addingToCart.value = null
+  }
+}
+const goBack = () => router.back()
+</script>
+
+<template>
+  <div class="category-details-page">
+    <GlobalHeader
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+
+    <div class="content">
+      <div class="back-button-container">
+        <BaseButton @click="goBack" variant="secondary" size="small">
+          ← {{ t('common.back') }}
+        </BaseButton>
+      </div>
+
+      <div
+        v-if="error"
+        class="error-message"
+      >
+        {{ error }}
+      </div>
+
+      <div v-if="loadingCategory" class="loading">
+        <div class="spinner"></div>
+        <p>{{ t('common.loading') }}</p>
+      </div>
+
+      <div v-else-if="category" class="category-content">
+        <div class="category-header">
+          <div class="category-image">
+            <img :src="(category.images?.large || category.images?.original || '')" :alt="category.name" />
+          </div>
+          <div class="category-info">
+            <h1 class="category-name">{{ category.name }}</h1>
+            <p class="category-description">{{ category.description }}</p>
+            <p class="category-count">{{ category.products_count }} {{ t('categoryDetails.products') }}</p>
+          </div>
+        </div>
+
+        <div class="wallet-card card">
+          <span class="wallet-label">{{ t('redeem.yourBalance') }}</span>
+          <h2 class="wallet-balance">{{ formattedBalance }}</h2>
+        </div>
+
+        <div class="products-section">
+          <h2 class="section-title">{{ t('categoryDetails.products') }}</h2>
+          <div class="product-grid">
+            <div
+              v-for="product in category.products || []"
+              :key="product.id"
+              class="card product-card"
+              @click="router.push('/product/' + product.id)"
+            >
+              <div class="product-image">
+                <img :src="product.images[0]?.medium" :alt="product.name" />
+              </div>
+              <div class="product-info">
+                <h3 class="product-name">{{ product.brand }} - {{ product.name }}</h3>
+                <p class="product-variant">{{ product.variant_name }}</p>
+                <p class="product-description">{{ product.short_description }}</p>
+                <div class="product-footer">
+                  <span class="product-cost">₹{{ product.redemption_cost }}</span>
+                  <div class="product-actions">
+                    <BaseButton
+                      @click="addToCart(product.id, $event)"
+                      :loading="addingToCart === product.id"
+                      size="small"
+                      variant="secondary"
+                      :disabled="product.stock_quantity === 0"
+                    >
+                      {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : t('productDetails.addToCart') }}
+                    </BaseButton>
+                    <span :class="{ 'out-of-stock': product.stock_quantity === 0 }">
+                      {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : '' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="!(category.products || []).length" class="no-products">
+              <p>{{ t('categoryDetails.noProducts') }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="no-category">
+        <p>{{ t('errors.categoryNotFound') }}</p>
+      </div>
+    </div>
+
+    <HelpModal
+      :show="showHelpModal"
+      @close="showHelpModal = false"
+    />
+    <LanguageModal
+      :show="showLanguageModal"
+      @close="showLanguageModal = false"
+    />
+  </div>
+</template>
+
+<style scoped>
+.category-details-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  width: 100%;
+}
+
+.back-button-container {
+  margin-bottom: 20px;
+}
+
+.category-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.category-header {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+  text-align: center;
+}
+
+.category-image {
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.category-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.category-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.category-name {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.category-description {
+  font-size: 16px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.category-count {
+  font-size: 14px;
+  color: #374151;
+  margin: 0;
+}
+
+.wallet-card {
+  padding: 20px 24px;
+  text-align: center;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.wallet-label {
+  font-size: 16px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.wallet-balance {
+  font-size: 40px;
+  font-weight: 800;
+  margin: 4px 0 0 0;
+}
+
+.products-section {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.section-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 20px 0;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.product-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.product-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.product-image {
+  width: 100%;
+  aspect-ratio: 5/4;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.product-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.product-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.product-variant {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.product-description {
+  font-size: 13px;
+  color: #374151;
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.product-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.product-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.product-cost {
+  font-size: 18px;
+  font-weight: 700;
+  color: #10b981;
+}
+
+.out-of-stock {
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.no-products, .no-category {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b7280;
+}
+
+.loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(16, 185, 129, 0.2);
+  border-top-color: #10b981;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-message {
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+</style>
 {/code}
 
 ================================================================================
@@ -8808,6 +12432,1463 @@ src/views/LanguageSelect.vue
 
 ================================================================================
 
+src/views/OrderDetailsPage.vue
+{code}
+<script setup>
+import { ref, onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { motion, AnimatePresence } from 'motion-v'
+
+// IMPORTS REMOVED:
+// 'useAuthStore', 'useWalletStore', and 'useLanguage' are
+// auto-imported by 'unplugin-auto-import' (see vite.config.js)
+import { ordersAPI } from '@/api/endpoints'
+
+// Import Common Components
+import GlobalHeader from '@/components/common/GlobalHeader.vue'
+import FloatingActions from '@/components/common/FloatingActions.vue'
+import HelpModal from '@/components/common/HelpModal.vue'
+import LanguageModal from '@/components/common/LanguageModal.vue'
+import BaseButton from '@/components/common/BaseButton.vue'
+
+// --- Initialize Stores, Router, and Composables ---
+const route = useRoute()
+const router = useRouter()
+const { t } = useLanguage() // This now works globally
+
+// --- Page State ---
+const showHelpModal = ref(false)
+const showLanguageModal = ref(false)
+const loading = ref(true)
+const order = ref(null)
+const error = ref('')
+
+// --- Computed Properties ---
+const orderId = computed(() => route.params.id)
+
+// --- Methods ---
+const fetchOrderDetails = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    const response = await ordersAPI.getOrder(orderId.value)
+    order.value = response
+  } catch (err) {
+    console.error('Failed to fetch order details:', err)
+    error.value = err.message || 'Failed to load order details'
+  } finally {
+    loading.value = false
+  }
+}
+
+const formatDate = (dateString) => {
+  return new Date(dateString).toLocaleDateString('en-IN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const getStatusColor = (status) => {
+  const colors = {
+    'pending': '#f59e0b',
+    'processing': '#3b82f6',
+    'shipped': '#8b5cf6',
+    'delivered': '#10b981',
+    'cancelled': '#ef4444'
+  }
+  return colors[status] || '#6b7280'
+}
+
+const goBack = () => router.back()
+
+// --- Lifecycle ---
+onMounted(() => {
+  fetchOrderDetails()
+})
+</script>
+
+<template>
+  <div class="order-details-page">
+    <GlobalHeader
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+
+    <div class="content">
+      <motion.div
+        class="back-button-container"
+        :initial="{ opacity: 0, x: -20 }"
+        :animate="{ opacity: 1, x: 0 }"
+      >
+        <BaseButton @click="goBack" variant="secondary" size="small">
+          ← {{ t('orderDetails.back') }}
+        </BaseButton>
+      </motion.div>
+
+      <AnimatePresence>
+        <motion.div
+          v-if="error"
+          class="error-message"
+          :initial="{ opacity: 0, y: -10 }"
+          :animate="{ opacity: 1, y: 0 }"
+        >
+          {{ error }}
+        </motion.div>
+      </AnimatePresence>
+
+      <div v-if="loading" class="loading">
+        <div class="spinner"></div>
+        <p>{{ t('common.loading') }}</p>
+      </div>
+
+      <div v-else-if="order" class="order-details">
+        <motion.div
+          class="order-header card"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+        >
+          <div class="order-title">
+            <h1>Order #{{ order.id }}</h1>
+            <span
+              class="status-badge"
+              :style="{ backgroundColor: getStatusColor(order.status) }"
+            >
+              {{ order.status }}
+            </span>
+          </div>
+          <div class="order-meta">
+            <p><strong>{{ t('orderDetails.orderDate') }}:</strong> {{ formatDate(order.order_date) }}</p>
+          </div>
+        </motion.div>
+
+        <motion.div
+          class="order-items card"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ delay: 0.1 }"
+        >
+          <h2>{{ t('orderDetails.items') }}</h2>
+          <div class="items-list">
+            <div
+              v-for="item in order.items"
+              :key="item.product_id"
+              class="order-item"
+            >
+              <div class="item-image">
+                <img :src="item.image_url" :alt="item.product_name" />
+              </div>
+              <div class="item-details">
+                <h3 class="item-name">{{ item.product_name }}</h3>
+                <p v-if="item.variant_name" class="item-variant">{{ item.variant_name }}</p>
+                <p class="item-price">₹{{ item.cost_per_item }} × {{ item.quantity }}</p>
+              </div>
+              <div class="item-total">
+                <p class="total-amount">₹{{ (item.cost_per_item * item.quantity).toFixed(2) }}</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          class="order-summary card"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ delay: 0.2 }"
+        >
+          <h2>{{ t('orderDetails.summary') }}</h2>
+          <div class="summary-row total-row">
+            <span>{{ t('orderDetails.total') }}:</span>
+            <span>₹{{ order.total_cost }}</span>
+          </div>
+        </motion.div>
+
+        <motion.div
+          v-if="order.shipping_address"
+          class="shipping-address card"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ delay: 0.3 }"
+        >
+          <h2>{{ t('orderDetails.address') }}</h2>
+          <div class="address-details">
+            <p>{{ order.shipping_address.line1 }}</p>
+            <p>{{ order.shipping_address.city }}, {{ order.shipping_address.state }} {{ order.shipping_address.pincode }}</p>
+          </div>
+        </motion.div>
+
+        <motion.div
+          v-if="order.notes"
+          class="order-notes card"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ delay: 0.4 }"
+        >
+          <h2>{{ t('orderDetails.notes') }}</h2>
+          <p>{{ order.notes }}</p>
+        </motion.div>
+      </div>
+
+      <div v-else class="no-order">
+        <p>{{ t('orderDetails.orderNotFound') }}</p>
+      </div>
+    </div>
+
+    <HelpModal
+      :show="showHelpModal"
+      @close="showHelpModal = false"
+    />
+    <LanguageModal
+      :show="showLanguageModal"
+      @close="showLanguageModal = false"
+    />
+
+    <FloatingActions
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+  </div>
+</template>
+
+<style scoped>
+.order-details-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  width: 100%;
+}
+
+.back-button-container {
+  margin-bottom: 20px;
+}
+
+.order-details {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.order-header {
+  text-align: center;
+}
+
+.order-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.order-title h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.status-badge {
+  padding: 6px 16px;
+  border-radius: 20px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.order-meta {
+  text-align: left;
+}
+
+.order-meta p {
+  margin: 8px 0;
+  font-size: 16px;
+  color: #374151;
+}
+
+.order-items h2,
+.order-summary h2,
+.shipping-address h2,
+.order-notes h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 20px 0;
+}
+
+.items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.order-item {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 12px;
+  align-items: center;
+}
+
+.item-image {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.item-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.item-details {
+  flex: 1;
+}
+
+.item-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 4px 0;
+}
+
+.item-variant {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0 0 8px 0;
+}
+
+.item-price {
+  font-size: 14px;
+  color: #374151;
+  margin: 0;
+}
+
+.item-total {
+  text-align: right;
+}
+
+.total-amount {
+  font-size: 18px;
+  font-weight: 700;
+  color: #10b981;
+  margin: 0;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 16px;
+  color: #374151;
+}
+
+.total-row {
+  font-size: 18px;
+  font-weight: 600;
+  border-top: 2px solid #e5e7eb;
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.address-details p {
+  margin: 4px 0;
+  font-size: 16px;
+  color: #374151;
+}
+
+.order-notes p {
+  font-size: 16px;
+  color: #374151;
+  line-height: 1.6;
+}
+
+.loading, .no-order {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(16, 185, 129, 0.2);
+  border-top-color: #10b981;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-message {
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+</style>
+{/code}
+
+================================================================================
+
+src/views/OrdersPage.vue
+{code}
+<script setup>
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { motion, AnimatePresence } from 'motion-v'
+
+// IMPORTS REMOVED:
+// 'useAuthStore', 'useWalletStore', and 'useLanguage' are
+// auto-imported by 'unplugin-auto-import' (see vite.config.js)
+import { ordersAPI } from '@/api/endpoints'
+
+// Import Common Components
+import GlobalHeader from '@/components/common/GlobalHeader.vue'
+import FloatingActions from '@/components/common/FloatingActions.vue'
+import HelpModal from '@/components/common/HelpModal.vue'
+import LanguageModal from '@/components/common/LanguageModal.vue'
+
+// --- Initialize Stores, Router, and Composables ---
+const router = useRouter()
+const { t } = useLanguage() // This now works globally
+
+// --- Page State ---
+const showHelpModal = ref(false)
+const showLanguageModal = ref(false)
+const loading = ref(true)
+const orders = ref([])
+const error = ref('')
+
+// --- Methods ---
+const fetchOrders = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    const response = await ordersAPI.getOrders()
+    orders.value = response.data || []
+  } catch (err) {
+    console.error('Failed to fetch orders:', err)
+    error.value = err.message || 'Failed to load orders'
+  } finally {
+    loading.value = false
+  }
+}
+
+const viewOrderDetails = (orderId) => {
+  router.push(`/order/${orderId}`)
+}
+
+const formatDate = (dateString) => {
+  return new Date(dateString).toLocaleDateString('en-IN', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const getStatusColor = (status) => {
+  const colors = {
+    'pending': '#f59e0b',
+    'processing': '#3b82f6',
+    'shipped': '#8b5cf6',
+    'delivered': '#10b981',
+    'cancelled': '#ef4444'
+  }
+  return colors[status] || '#6b7280'
+}
+
+// --- Lifecycle ---
+onMounted(() => {
+  fetchOrders()
+})
+</script>
+
+<template>
+  <div class="orders-page">
+    <GlobalHeader
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+
+    <div class="content">
+      <motion.h1
+        class="page-title"
+        :initial="{ opacity: 0, y: -20 }"
+        :animate="{ opacity: 1, y: 0 }"
+      >
+        {{ t('orders.title') }}
+      </motion.h1>
+
+      <AnimatePresence>
+        <motion.div
+          v-if="error"
+          class="error-message"
+          :initial="{ opacity: 0, y: -10 }"
+          :animate="{ opacity: 1, y: 0 }"
+        >
+          {{ error }}
+        </motion.div>
+      </AnimatePresence>
+
+      <div v-if="loading" class="loading">
+        <div class="spinner"></div>
+        <p>{{ t('orders.loading') }}</p>
+      </div>
+
+      <div v-else-if="orders.length === 0" class="empty-orders">
+        <motion.div
+          class="empty-content"
+          :initial="{ opacity: 0, scale: 0.9 }"
+          :animate="{ opacity: 1, scale: 1 }"
+          :transition="{ delay: 0.2 }"
+        >
+          <div class="icon">📦</div>
+          <h2>{{ t('orders.empty') }}</h2>
+          <p>{{ t('orders.emptyDesc') }}</p>
+        </motion.div>
+      </div>
+
+      <div v-else class="orders-list">
+        <motion.div
+          v-for="(order, index) in orders"
+          :key="order.order_id"
+          class="order-card card"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ delay: 0.1 + index * 0.05 }"
+          @click="viewOrderDetails(order.order_id)"
+        >
+          <div class="order-header">
+            <div class="order-info">
+              <h3 class="order-number">{{ t('orders.orderNumber') }}{{ order.order_number }}</h3>
+              <p class="order-date">{{ formatDate(order.order_date) }}</p>
+            </div>
+            <div class="order-status">
+              <span
+                class="status-badge"
+                :style="{ backgroundColor: getStatusColor(order.status) }"
+              >
+                {{ order.status }}
+              </span>
+            </div>
+          </div>
+
+          <div class="order-items-count">
+            <p>{{ order.items_count }} item{{ order.items_count > 1 ? 's' : '' }}</p>
+          </div>
+
+          <div class="order-footer">
+            <div class="order-total">
+              <span class="total-label">{{ t('cart.total') }}:</span>
+              <span class="total-amount">₹{{ order.total_cost }}</span>
+            </div>
+            <div class="view-details">
+              <span>{{ t('orders.viewDetails') }}</span>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+
+    <HelpModal
+      :show="showHelpModal"
+      @close="showHelpModal = false"
+    />
+    <LanguageModal
+      :show="showLanguageModal"
+      @close="showLanguageModal = false"
+    />
+
+    <FloatingActions
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+  </div>
+</template>
+
+<style scoped>
+.orders-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 20px;
+  width: 100%;
+  text-align: center;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 40px;
+}
+
+.orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.order-card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.order-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.order-info h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 4px 0;
+}
+
+.order-date {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.order-items-count {
+  margin-bottom: 16px;
+}
+
+.order-items-count p {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.order-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 16px;
+}
+
+.order-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.total-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.total-amount {
+  font-size: 18px;
+  font-weight: 700;
+  color: #10b981;
+}
+
+.view-details {
+  font-size: 14px;
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.empty-orders {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.empty-content {
+  text-align: center;
+}
+
+.empty-content .icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.empty-content h2 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+}
+
+.empty-content p {
+  font-size: 16px;
+  color: #6b7280;
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.error-message {
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(16, 185, 129, 0.2);
+  border-top-color: #10b981;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+</style>
+{/code}
+
+================================================================================
+
+src/views/ProductDetails.vue
+{code}
+<script setup>
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { motion, AnimatePresence } from 'motion-v'
+import { Swiper, SwiperSlide } from 'swiper/vue'
+import 'swiper/css'
+
+// IMPORTS REMOVED:
+// 'useAuthStore', 'useWalletStore', and 'useLanguage' are
+// auto-imported by 'unplugin-auto-import' (see vite.config.js)
+import { shopAPI, redemptionAPI } from '@/api/endpoints'
+import { useCartStore } from '@/stores/cart'
+import { useToast } from '@/composables/useToast'
+
+// Import Common Components
+import GlobalHeader from '@/components/common/GlobalHeader.vue'
+import HelpModal from '@/components/common/HelpModal.vue'
+import LanguageModal from '@/components/common/LanguageModal.vue'
+import BaseButton from '@/components/common/BaseButton.vue'
+import BaseInput from '@/components/common/BaseInput.vue'
+
+// --- Initialize Stores, Router, and Composables ---
+const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore() // This now works globally
+const walletStore = useWalletStore() // This now works globally
+const cartStore = useCartStore()
+const { t, locale } = useLanguage() // This now works globally
+const toast = useToast()
+
+// --- Page State ---
+const loadingProduct = ref(true)
+const placingOrder = ref(false)
+const addingToCart = ref(false)
+const product = ref(null)
+const error = ref('')
+const successMessage = ref('')
+
+// --- Modal State ---
+const showHelpModal = ref(false)
+const showLanguageModal = ref(false)
+const showConfirmModal = ref(false)
+const showAddressModal = ref(false)
+const addressError = ref('')
+
+// Address form state, pre-filled if user data exists
+const address = ref({
+  line1: authStore.user?.shipping_address?.line1 || '',
+  city: authStore.user?.shipping_address?.city || '',
+  state: authStore.user?.shipping_address?.state || '',
+  pincode: authStore.user?.shipping_address?.pincode || ''
+})
+
+// --- Computed Properties ---
+const walletBalance = computed(() => walletStore.balance)
+const formattedBalance = computed(() => walletStore.formattedBalance)
+const userAddress = computed(() => authStore.user?.shipping_address)
+
+// --- Data Fetching ---
+const fetchProduct = async () => {
+  loadingProduct.value = true
+  error.value = ''
+  try {
+    const response = await shopAPI.getProduct(route.params.id, locale.value)
+    product.value = response.product
+  } catch (err) {
+    console.error('Failed to fetch product:', err)
+    error.value = err.message || t('errors.network')
+  } finally {
+    loadingProduct.value = false
+  }
+}
+
+// Fetch product on mount and when language changes
+onMounted(fetchProduct)
+watch(locale, fetchProduct)
+
+// --- Methods ---
+const handleRedeemClick = () => {
+  error.value = ''
+  successMessage.value = ''
+
+  // 1. Check if user has an address
+  if (!userAddress.value || !userAddress.value.line1) {
+    showAddressModal.value = true
+    return
+  }
+
+  // 2. Check if user has enough balance
+  if (walletBalance.value < product.value.redemption_cost) {
+    error.value = t('redeem.insufficientBalance')
+    return
+  }
+
+  // 3. Show confirmation modal
+  showConfirmModal.value = true
+}
+
+const confirmRedemption = async () => {
+  if (!product.value) return
+
+  placingOrder.value = true
+  error.value = ''
+  successMessage.value = ''
+
+  try {
+    const response = await redemptionAPI.placeOrder(product.value.id, 1)
+
+    // Update wallet balance from API response
+    walletStore.syncWallet({
+      balance: response.new_wallet_balance,
+      lucky_draw_tickets: walletStore.ticketCount // Preserve existing ticket count
+    })
+
+    successMessage.value = t('redeem.orderSuccess')
+    showConfirmModal.value = false
+  } catch (err) {
+    console.error('Failed to place order:', err)
+    error.value = err.message || t('errors.unknown')
+  } finally {
+    placingOrder.value = false
+  }
+}
+
+const handleAddressSubmit = async () => {
+  placingOrder.value = true
+  addressError.value = ''
+  try {
+    // Use the authStore action to update the address
+    const result = await authStore.updateAddress(address.value)
+
+    if (result.success) {
+      showAddressModal.value = false
+    } else {
+      addressError.value = result.error || t('errors.unknown')
+    }
+  } catch (err) {
+    console.error('Failed to update address:', err)
+    addressError.value = err.message || t('errors.unknown')
+  } finally {
+    placingOrder.value = false
+  }
+}
+
+const addToCart = async () => {
+  if (!product.value) return
+  addingToCart.value = true
+  try {
+    await cartStore.addToCart(product.value.id, 1)
+    toast.showSuccess(t('cart.addedToCart'))
+  } catch (error) {
+    console.error('Failed to add to cart:', error)
+    toast.showError(t('cart.addToCartError'))
+  } finally {
+    addingToCart.value = false
+  }
+}
+
+const goBack = () => router.back()
+</script>
+
+<template>
+  <div class="product-details-page">
+    <GlobalHeader
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+
+    <div class="content">
+      <motion.div
+        class="back-button-container"
+        :initial="{ opacity: 0, x: -20 }"
+        :animate="{ opacity: 1, x: 0 }"
+      >
+        <BaseButton @click="goBack" variant="secondary" size="small">
+          ← {{ t('common.back') }}
+        </BaseButton>
+      </motion.div>
+
+      <AnimatePresence>
+        <motion.div
+          v-if="error"
+          class="error-message"
+          :initial="{ opacity: 0, y: -10 }"
+          :animate="{ opacity: 1, y: 0 }"
+        >
+          {{ error }}
+        </motion.div>
+      </AnimatePresence>
+      <AnimatePresence>
+        <motion.div
+          v-if="successMessage"
+          class="success-message"
+          :initial="{ opacity: 0, y: -10 }"
+          :animate="{ opacity: 1, y: 0 }"
+        >
+          🎉 {{ successMessage }}
+        </motion.div>
+      </AnimatePresence>
+
+      <div v-if="loadingProduct" class="loading">
+        <div class="spinner"></div>
+        <p>{{ t('common.loading') }}</p>
+      </div>
+
+      <div v-else-if="product" class="product-details">
+        <motion.div
+          class="product-header"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+        >
+          <div class="product-images">
+            <Swiper
+              :slides-per-view="1"
+              :autoplay="{ delay: 3000 }"
+              :loop="product.images.length > 1"
+              :pagination="{ clickable: true }"
+              class="product-swiper"
+            >
+              <SwiperSlide v-for="image in product.images" :key="image.thumb">
+                <img
+                  :src="image.large"
+                  :alt="product.name"
+                  class="product-image"
+                />
+              </SwiperSlide>
+            </Swiper>
+          </div>
+          <div class="product-info">
+            <h1 class="product-name">{{ product.brand }} - {{ product.name }}</h1>
+            <p v-if="product.variant_name" class="product-variant">{{ product.variant_name }}</p>
+            <p v-if="product.category" class="product-category">Category: {{ product.category.name }}</p>
+            <p class="product-description">{{ product.short_description || t('productDetails.description') }}</p>
+            <div class="product-pricing">
+              <span class="mrp">{{ t('productDetails.mrp') }}: ₹{{ product.mrp }}</span>
+              <span class="redemption-cost">{{ t('redeem.redeemFor') }} ₹{{ product.redemption_cost }}</span>
+              <span v-if="product.cashback_percentage" class="cashback">Cashback: {{ product.cashback_percentage }}%</span>
+            </div>
+            <div v-if="product.stock_quantity === 0" class="stock-info">
+              <span class="out-of-stock">{{ t('productDetails.outOfStock') }}</span>
+            </div>
+            <div v-if="product.video_url" class="video-section">
+              <h3>Product Video</h3>
+              <video controls :src="product.video_url" class="product-video"></video>
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          class="wallet-card card"
+          :initial="{ opacity: 0, scale: 0.9 }"
+          :animate="{ opacity: 1, scale: 1 }"
+          :transition="{ delay: 0.1 }"
+        >
+          <span class="wallet-label">{{ t('redeem.yourBalance') }}</span>
+          <h2 class="wallet-balance">{{ formattedBalance }}</h2>
+        </motion.div>
+
+        <motion.div
+          class="action-section"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ delay: 0.2 }"
+        >
+          <div class="action-buttons">
+            <BaseButton
+              @click="addToCart"
+              :loading="addingToCart"
+              variant="secondary"
+              :disabled="product.stock_quantity === 0"
+            >
+              {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : t('productDetails.addToCart') }}
+            </BaseButton>
+          </div>
+        </motion.div>
+      </div>
+
+      <div v-else class="no-product">
+        <p>{{ t('errors.productNotFound') }}</p>
+      </div>
+    </div>
+
+    <HelpModal
+      :show="showHelpModal"
+      @close="showHelpModal = false"
+    />
+    <LanguageModal
+      :show="showLanguageModal"
+      @close="showLanguageModal = false"
+    />
+
+    <AnimatePresence>
+      <motion.div
+        v-if="showConfirmModal"
+        class="modal-overlay"
+        :initial="{ opacity: 0 }"
+        :animate="{ opacity: 1 }"
+        :exit="{ opacity: 0 }"
+        @click.self="showConfirmModal = false"
+      >
+        <motion.div
+          class="modal-content"
+          :initial="{ scale: 0.9, opacity: 0 }"
+          :animate="{ scale: 1, opacity: 1 }"
+          :exit="{ scale: 0.9, opacity: 0 }"
+        >
+          <h2>{{ t('redeem.confirmRedemption') }}</h2>
+          <p v-if="product">
+            Are you sure you want to redeem
+            <strong>{{ product.name }} ({{ product.variant_name }})</strong>
+            for <strong>₹{{ product.redemption_cost }}</strong>?
+          </p>
+          <div class="modal-actions">
+            <BaseButton
+              @click="showConfirmModal = false"
+              variant="secondary"
+              :disabled="placingOrder"
+            >
+              {{ t('common.cancel') }}
+            </BaseButton>
+            <BaseButton
+              @click="confirmRedemption"
+              :loading="placingOrder"
+            >
+              {{ t('redeem.placeOrder') }}
+            </BaseButton>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+
+    <AnimatePresence>
+      <motion.div
+        v-if="showAddressModal"
+        class="modal-overlay"
+        :initial="{ opacity: 0 }"
+        :animate="{ opacity: 1 }"
+        :exit="{ opacity: 0 }"
+        @click.self="showAddressModal = false"
+      >
+        <motion.div
+          class="modal-content"
+          :initial="{ scale: 0.9, opacity: 0 }"
+          :animate="{ scale: 1, opacity: 1 }"
+          :exit="{ scale: 0.9, opacity: 0 }"
+        >
+          <h2>{{ t('redeem.address') }}</h2>
+          <p>{{ t('redeem.address') }}</p>
+          <form @submit.prevent="handleAddressSubmit" class="address-form">
+            <BaseInput
+              v-model="address.line1"
+              label="Address Line 1"
+              placeholder="House No, Street Name"
+              required
+            />
+            <BaseInput
+              v-model="address.city"
+              label="City"
+              placeholder="Your City"
+              required
+            />
+            <BaseInput
+              v-model="address.state"
+              label="State"
+              placeholder="Your State"
+              required
+            />
+            <BaseInput
+              v-model="address.pincode"
+              label="Pincode"
+              placeholder="6-digit Pincode"
+              type="tel"
+              maxlength="6"
+              required
+            />
+            <div v-if="addressError" class="error-message">
+              {{ addressError }}
+            </div>
+            <BaseButton
+              type="submit"
+              :loading="placingOrder"
+            >
+              {{ t('common.save') }}
+            </BaseButton>
+          </form>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  </div>
+</template>
+
+<style scoped>
+.product-details-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 20px;
+  width: 100%;
+}
+
+.back-button-container {
+  margin-bottom: 20px;
+}
+
+.product-details {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.product-header {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.product-images {
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.product-swiper {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.product-image {
+  width: 100%;
+  height: 300px;
+  object-fit: cover;
+  display: block;
+}
+
+.product-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.product-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.product-variant {
+  font-size: 16px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.product-description {
+  font-size: 16px;
+  color: #374151;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.product-category {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 4px 0;
+}
+
+.product-pricing {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mrp {
+  font-size: 16px;
+  color: #6b7280;
+  text-decoration: line-through;
+}
+
+.redemption-cost {
+  font-size: 20px;
+  font-weight: 700;
+  color: #10b981;
+}
+
+.cashback {
+  font-size: 16px;
+  color: #059669;
+  font-weight: 600;
+}
+
+.stock-info {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.out-of-stock {
+  color: #ef4444;
+}
+
+.video-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.video-section h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+}
+
+.product-video {
+  width: 100%;
+  max-width: 400px;
+  border-radius: 12px;
+}
+
+.wallet-card {
+  padding: 20px 24px;
+  text-align: center;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.wallet-label {
+  font-size: 16px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.wallet-balance {
+  font-size: 40px;
+  font-weight: 800;
+  margin: 4px 0 0 0;
+}
+
+.action-section {
+  text-align: center;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.loading, .no-product {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(16, 185, 129, 0.2);
+  border-top-color: #10b981;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-message {
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.success-message {
+  background: #dcfce7;
+  color: #166534;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+.modal-content h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+}
+
+.modal-content p {
+  font-size: 15px;
+  color: #6b7280;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.address-form {
+  text-align: left;
+}
+
+.address-form .base-button {
+  margin-top: 8px;
+}
+
+.address-form .error-message {
+  margin-top: 0;
+}
+</style>
+{/code}
+
+================================================================================
+
 src/views/ProfilePage.vue
 {code}
 <!-- src/views/ProfilePage.vue -->
@@ -8937,7 +14018,660 @@ h1 {
 
 src/views/RedeemPage.vue
 {code}
-<template><div>Redeem Page</div></template>
+<script setup>
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
+// IMPORTS REMOVED:
+// 'useAuthStore', 'useWalletStore', and 'useLanguage' are
+// auto-imported by 'unplugin-auto-import' (see vite.config.js)
+import { shopAPI } from '@/api/endpoints'
+import { useCartStore } from '@/stores/cart'
+import { motion, AnimatePresence } from 'motion-v'
+import { Swiper, SwiperSlide } from 'swiper/vue'
+import 'swiper/css'
+import { useToast } from '@/composables/useToast'
+
+// Import Common Components
+import GlobalHeader from '@/components/common/GlobalHeader.vue'
+import FloatingActions from '@/components/common/FloatingActions.vue'
+import HelpModal from '@/components/common/HelpModal.vue'
+import LanguageModal from '@/components/common/LanguageModal.vue'
+import BaseButton from '@/components/common/BaseButton.vue'
+import BaseInput from '@/components/common/BaseInput.vue'
+
+// --- Initialize Stores, Router, and Composables ---
+const router = useRouter()
+const authStore = useAuthStore() // This now works globally
+const walletStore = useWalletStore() // This now works globally
+const cartStore = useCartStore()
+const { t, locale } = useLanguage() // This now works globally
+const toast = useToast()
+
+// --- Page State ---
+const loadingSlider = ref(true)
+const loadingCategories = ref(true)
+const loadingProducts = ref(true)
+const placingOrder = ref(false)
+const slider = ref([])
+const categories = ref([])
+const products = ref([])
+const error = ref('')
+const successMessage = ref('')
+
+// --- Cart State ---
+const addingToCart = ref(null)
+
+// --- Modal State ---
+const showHelpModal = ref(false)
+const showLanguageModal = ref(false)
+
+// --- Computed Properties ---
+const walletBalance = computed(() => walletStore.balance)
+const formattedBalance = computed(() => walletStore.formattedBalance)
+
+// --- Data Fetching ---
+const fetchSlider = async () => {
+  loadingSlider.value = true
+  try {
+    const response = await shopAPI.getSlider()
+    slider.value = response.slides || []
+  } catch (err) {
+    console.error('Failed to fetch slider:', err)
+  } finally {
+    loadingSlider.value = false
+  }
+}
+
+const fetchCategories = async () => {
+  loadingCategories.value = true
+  try {
+    const response = await shopAPI.getCategories(locale.value)
+    categories.value = response.categories || []
+  } catch (err) {
+    console.error('Failed to fetch categories:', err)
+  } finally {
+    loadingCategories.value = false
+  }
+}
+
+const fetchProducts = async () => {
+  loadingProducts.value = true
+  error.value = ''
+  try {
+    // Fetch products using the currently selected language
+    const response = await shopAPI.getProducts(locale.value)
+    products.value = (response.products || []).slice(0, 20) // Limit to 20
+  } catch (err) {
+    console.error('Failed to fetch products:', err)
+    error.value = err.message || t('errors.network')
+  } finally {
+    loadingProducts.value = false
+  }
+}
+
+// Fetch data on mount
+onMounted(async () => {
+  await Promise.all([fetchSlider(), fetchCategories(), fetchProducts()])
+})
+
+// Refetch categories and products if the user changes the language
+watch(locale, async () => {
+  await Promise.all([fetchCategories(), fetchProducts()])
+})
+
+// --- Methods ---
+const addToCart = async (productId, event) => {
+  event.stopPropagation() // Prevent card click
+  addingToCart.value = productId
+
+  try {
+    await cartStore.addToCart(productId, 1)
+    toast.showSuccess(t('cart.addedToCart'))
+  } catch (error) {
+    console.error('Failed to add to cart:', error)
+    toast.showError(t('cart.addToCartError'))
+  } finally {
+    addingToCart.value = null
+  }
+}
+const goToDashboard = () => router.push('/dashboard')
+</script>
+
+<template>
+  <div class="redeem-page">
+    <GlobalHeader 
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+    
+    <div class="content">
+      <!-- Slider -->
+      <motion.div
+        v-if="!loadingSlider"
+        class="slider-section"
+        :initial="{ opacity: 0, y: -20 }"
+        :animate="{ opacity: 1, y: 0 }"
+      >
+        <Swiper
+          :slides-per-view="1"
+          :autoplay="{ delay: 3000 }"
+          :loop="true"
+          :pagination="{ clickable: true }"
+          class="slider-swiper"
+        >
+          <SwiperSlide v-for="slide in slider" :key="slide.id">
+            <div class="slide" :style="{ backgroundImage: `url(${slide.images.desktop})` }">
+              <div class="slide-content">
+                <h2>{{ slide.title }}</h2>
+                <p>{{ slide.description }}</p>
+                <a v-if="slide.link" :href="slide.link.url" :target="slide.link.targetBlank ? '_blank' : '_self'" class="slide-cta">
+                  {{ slide.link.ctaText }}
+                </a>
+              </div>
+            </div>
+          </SwiperSlide>
+        </Swiper>
+      </motion.div>
+
+      <motion.h1
+        class="page-title"
+        :initial="{ opacity: 0, y: -20 }"
+        :animate="{ opacity: 1, y: 0 }"
+      >
+        {{ t('redeem.title') }}
+      </motion.h1>
+
+      <motion.div 
+        class="card wallet-card"
+        :initial="{ opacity: 0, scale: 0.9 }"
+        :animate="{ opacity: 1, scale: 1 }"
+        :transition="{ delay: 0.1 }"
+      >
+        <span class="wallet-label">{{ t('redeem.yourBalance') }}</span>
+        <h2 class="wallet-balance">{{ formattedBalance }}</h2>
+      </motion.div>
+
+      <!-- Categories Carousel -->
+      <motion.div
+        v-if="!loadingCategories"
+        class="categories-section"
+        :initial="{ opacity: 0, y: 20 }"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{ delay: 0.2 }"
+      >
+        <h2 class="section-title">{{ t('common.categories') }}</h2>
+        <Swiper
+          :slides-per-view="4"
+          :space-between="16"
+          :loop="false"
+          :breakpoints="{
+            320: { slidesPerView: 2 },
+            640: { slidesPerView: 3 },
+            768: { slidesPerView: 4 }
+          }"
+          class="categories-swiper"
+        >
+          <SwiperSlide v-for="category in categories" :key="category.id">
+            <div class="category-card" @click="router.push('/category/' + category.slug)">
+              <img :src="category.images.thumb" :alt="category.name" class="category-image" />
+              <h3 class="category-name">{{ category.name }}</h3>
+              <p class="category-count">{{ category.products_count }} products</p>
+            </div>
+          </SwiperSlide>
+        </Swiper>
+      </motion.div>
+      
+      <AnimatePresence>
+        <motion.div
+          v-if="error"
+          class="error-message"
+          :initial="{ opacity: 0, y: -10 }"
+          :animate="{ opacity: 1, y: 0 }"
+        >
+          {{ error }}
+        </motion.div>
+      </AnimatePresence>
+      <AnimatePresence>
+        <motion.div
+          v-if="successMessage"
+          class="success-message"
+          :initial="{ opacity: 0, y: -10 }"
+          :animate="{ opacity: 1, y: 0 }"
+        >
+          🎉 {{ successMessage }}
+        </motion.div>
+      </AnimatePresence>
+
+      <div v-if="loadingProducts" class="loading">
+        <div class="spinner"></div>
+        <p>{{ t('common.loading') }}</p>
+      </div>
+      
+      <div v-else class="product-grid">
+        <motion.div
+          v-for="(product, index) in products"
+          :key="product.id"
+          class="card product-card"
+          :initial="{ opacity: 0, y: 20 }"
+          :animate="{ opacity: 1, y: 0 }"
+          :transition="{ delay: 0.2 + index * 0.05 }"
+          @click="router.push('/product/' + product.id)"
+        >
+          <div class="product-image">
+            <img :src="product.images[0]?.medium" :alt="product.name" />
+          </div>
+          <div class="product-info">
+            <h3 class="product-name">{{ product.brand }} - {{ product.name }}</h3>
+            <p class="product-variant">{{ product.variant_name }}</p>
+            <p class="product-description">{{ product.short_description }}</p>
+            <div class="product-footer">
+              <span class="product-cost">₹{{ product.redemption_cost }}</span>
+              <div class="product-actions">
+                <BaseButton
+                  @click="addToCart(product.id, $event)"
+                  :loading="addingToCart === product.id"
+                  size="small"
+                  variant="secondary"
+                  :disabled="product.stock_quantity === 0"
+                >
+                  {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : t('productDetails.addToCart') }}
+                </BaseButton>
+                <span :class="{ 'out-of-stock': product.stock_quantity === 0 }">
+                  {{ product.stock_quantity === 0 ? t('productDetails.outOfStock') : '' }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        <div v-if="!products.length" class="no-products">
+          <p>{{ t('redeem.title') }}</p>
+        </div>
+      </div>
+      
+      <BaseButton 
+        @click="goToDashboard"
+        variant="secondary"
+        class="back-button"
+      >
+        ← {{ t('dashboard.welcome') }}
+      </BaseButton>
+    </div>
+
+    <HelpModal
+      :show="showHelpModal"
+      @close="showHelpModal = false"
+    />
+    <LanguageModal
+      :show="showLanguageModal"
+      @close="showLanguageModal = false"
+    />
+
+    <FloatingActions
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+
+  </div>
+</template>
+
+<style scoped>
+.redeem-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(16, 185, 129, 0.2);
+  border-top-color: #10b981;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.content {
+  flex: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  width: 100%;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+.wallet-card {
+  padding: 20px 24px;
+  text-align: center;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.wallet-label {
+  font-size: 16px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.wallet-balance {
+  font-size: 40px;
+  font-weight: 800;
+  margin: 4px 0 0 0;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.product-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.product-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.product-image {
+  width: 100%;
+  aspect-ratio: 5/4;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.product-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.product-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.product-variant {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.product-description {
+  font-size: 13px;
+  color: #374151;
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.product-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.product-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.product-cost {
+  font-size: 18px;
+  font-weight: 700;
+  color: #10b981;
+}
+
+.out-of-stock {
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.no-products {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b7280;
+}
+
+.back-button {
+  margin-top: 24px;
+}
+
+/* Error & Success Messages */
+.error-message {
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.success-message {
+  background: #dcfce7;
+  color: #166534;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Modals */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+.modal-content h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+}
+
+.modal-content p {
+  font-size: 15px;
+  color: #6b7280;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.address-form {
+  text-align: left;
+}
+
+.address-form .base-button {
+  margin-top: 8px;
+}
+
+.address-form .error-message {
+  margin-top: 0;
+}
+
+/* Slider Styles */
+.slider-section {
+  margin-bottom: 30px;
+}
+
+.slider-swiper {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.slide {
+  position: relative;
+  height: 300px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slide-content {
+  text-align: center;
+  color: white;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 20px;
+  border-radius: 12px;
+  max-width: 400px;
+}
+
+.slide h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+
+.slide p {
+  font-size: 16px;
+  margin: 0 0 16px 0;
+}
+
+.slide-cta {
+  display: inline-block;
+  background: #10b981;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.slide-cta:hover {
+  background: #059669;
+}
+
+/* Categories Styles */
+.categories-section {
+  margin-bottom: 30px;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 16px;
+}
+
+.categories-swiper {
+  border-radius: 12px;
+}
+
+.category-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+  cursor: pointer;
+}
+
+.category-card:hover {
+  transform: translateY(-2px);
+}
+
+.category-image {
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  object-fit: cover;
+  margin-bottom: 8px;
+}
+
+.category-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 4px 0;
+}
+
+.category-count {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+}
+</style>
 {/code}
 
 ================================================================================
@@ -8945,27 +14679,26 @@ src/views/RedeemPage.vue
 src/views/ScanPage.vue
 {code}
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWalletStore } from '@/stores/wallet'
 import { useAuthStore } from '@/stores/auth'
 import { useLanguage } from '@/composables/useLanguage'
 import { rewardAPI } from '@/api/endpoints'
 import { motion } from 'motion-v'
-import { Swiper, SwiperSlide } from 'swiper/vue'
-import { Autoplay, EffectCoverflow } from 'swiper/modules'
-import 'swiper/css'
-import 'swiper/css/effect-coverflow'
 import GlobalHeader from '@/components/common/GlobalHeader.vue'
 import HelpModal from '@/components/common/HelpModal.vue'
 import LanguageModal from '@/components/common/LanguageModal.vue'
 import ScratchCard from '@/components/reward/ScratchCard.vue'
 import OTPModal from '@/components/common/OTPModal.vue'
-import BaseButton from '@/components/common/BaseButton.vue'
-import BaseInput from '@/components/common/BaseInput.vue'
 
-// *** FIXED: Import QR Scanner ***
-import { QrcodeStream } from 'vue-qrcode-reader'
+// Import new scan components
+import PrizeBadge from '@/components/scan/PrizeBadge.vue'
+import GiftCarousel from '@/components/scan/GiftCarousel.vue'
+import ExcitementChips from '@/components/scan/ExcitementChips.vue'
+import ScanForm from '@/components/scan/ScanForm.vue'
+import WinnerShowcase from '@/components/scan/WinnerShowcase.vue'
+import QRScannerModal from '@/components/scan/QRScannerModal.vue'
 
 const router = useRouter()
 const walletStore = useWalletStore()
@@ -8986,26 +14719,9 @@ const gifts = ref([])
 
 // *** FIXED: Refs for QR Scanner ***
 const showScanner = ref(false)
-const scannerError = ref('')
-const cameraReady = ref(false)
 
 // *** FIX: Add local ref to keep reward visible during navigation ***
 const localPendingReward = ref(null)
-
-// Swiper modules
-const modules = [Autoplay, EffectCoverflow]
-
-// *** FIXED: Add barcode formats (explicitly set QR code) ***
-const barcodeFormats = ref(['qr_code'])
-
-// *** FIXED: Enhanced camera constraints with autofocus ***
-const cameraConstraints = computed(() => ({
-  facingMode: 'environment',
-  advanced: [
-    { focusMode: 'continuous' },
-    { zoom: 1.0 }
-  ]
-}))
 
 // Fetch gift slider data
 const fetchGifts = async () => {
@@ -9025,24 +14741,21 @@ onMounted(() => {
 // *** FIXED: Function to open scanner ***
 const openScanner = () => {
   error.value = ''
-  scannerError.value = ''
-  cameraReady.value = false
   showScanner.value = true
 }
 
 // *** FIXED: Function to close scanner ***
 const closeScanner = () => {
   showScanner.value = false
-  cameraReady.value = false
 }
 
-// *** FIXED: Handle successful QR detection (changed from onDecode to onDetect) ***
+// *** FIXED: Handle successful QR detection ***
 const onDetect = (detectedCodes) => {
   if (detectedCodes && detectedCodes.length > 0) {
     const decodedString = detectedCodes[0].rawValue
     console.log('QR detected:', decodedString)
     closeScanner()
-    
+
     if (decodedString && /^[A-Z0-9]{12}$/i.test(decodedString)) {
       scannedCode.value = decodedString.toUpperCase()
       validateCode() // Auto-submit on valid scan
@@ -9051,91 +14764,6 @@ const onDetect = (detectedCodes) => {
       scannedCode.value = decodedString // Show it to the user
       error.value = t('scan.invalid') // Show invalid error
     }
-  }
-}
-
-// *** FIXED: Handle camera initialization and permissions ***
-const onScannerInit = async (promise) => {
-  scannerError.value = ''
-  try {
-    const { capabilities } = await promise
-    console.log('Camera initialized successfully', capabilities)
-    cameraReady.value = true
-    
-    // *** FIXED: Apply video constraints after camera is ready for better focus ***
-    if (capabilities) {
-      try {
-        // Additional focus optimization for mobile devices
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            focusMode: 'continuous',
-            zoom: true
-          }
-        })
-        console.log('Enhanced constraints applied')
-      } catch (constraintErr) {
-        console.warn('Could not apply enhanced constraints:', constraintErr)
-      }
-    }
-  } catch (err) {
-    console.error('Camera init error:', err)
-    cameraReady.value = false
-    
-    if (err.name === 'NotAllowedError') {
-      scannerError.value = t('errors.cameraPermission') || 'Camera permission denied. Please allow camera access.'
-    } else if (err.name === 'NotFoundError') {
-      scannerError.value = t('errors.cameraNotFound') || 'No camera found on this device.'
-    } else if (err.name === 'NotSupportedError') {
-      scannerError.value = 'Secure context required (HTTPS or localhost).'
-    } else if (err.name === 'NotReadableError') {
-      scannerError.value = 'Camera already in use by another application.'
-    } else if (err.name === 'OverconstrainedError') {
-      scannerError.value = 'Camera does not meet requirements.'
-    } else if (err.name === 'StreamApiNotSupportedError') {
-      scannerError.value = 'Camera API not supported in this browser.'
-    } else if (err.name === 'InsecureContextError') {
-      scannerError.value = 'Camera access only allowed on HTTPS or localhost.'
-    } else {
-      scannerError.value = t('errors.cameraError') || err.message || 'Camera error occurred.'
-    }
-  }
-}
-
-// *** FIXED: Handle scanner errors ***
-const onScannerError = (err) => {
-  console.error('Scanner error:', err)
-  scannerError.value = err.message || 'Scanner error occurred'
-}
-
-// *** FIXED: Camera ready handler ***
-const onCameraReady = () => {
-  console.log('Camera stream is ready')
-  cameraReady.value = true
-  scannerError.value = ''
-}
-
-// *** FIXED: Track function for visual feedback (helps with detection) ***
-const paintOutline = (detectedCodes, ctx) => {
-  for (const detectedCode of detectedCodes) {
-    const [firstPoint, ...otherPoints] = detectedCode.cornerPoints
-    
-    ctx.strokeStyle = '#10b981'
-    ctx.lineWidth = 4
-    ctx.beginPath()
-    ctx.moveTo(firstPoint.x, firstPoint.y)
-    
-    for (const { x, y } of otherPoints) {
-      ctx.lineTo(x, y)
-    }
-    
-    ctx.lineTo(firstPoint.x, firstPoint.y)
-    ctx.closePath()
-    ctx.stroke()
-    
-    // Add a green fill with transparency
-    ctx.fillStyle = 'rgba(16, 185, 129, 0.2)'
-    ctx.fill()
   }
 }
 
@@ -9280,173 +14908,22 @@ const claimReward = async () => {
 
     <div class="page-content">
       <div v-if="step === 'scan'" class="scan-container">
-        <motion.div 
-          class="prize-badge"
-          :animate="{ 
-            scale: [1, 1.1, 1],
-            rotate: [0, -5, 5, 0]
-          }"
-          :transition="{ 
-            duration: 2,
-            repeat: Infinity,
-            repeatDelay: 1
-          }"
-        >
-          <div class="badge-shine"></div>
-          <span class="badge-text">🎊 WIN AMAZING PRIZES! 🎊</span>
-        </motion.div>
+        <PrizeBadge />
 
-        <motion.div 
-          class="carousel-section"
-          :initial="{ opacity: 0, y: 20 }"
-          :animate="{ opacity: 1, y: 0 }"
-          :transition="{ duration: 0.6 }"
-        >
-          <Swiper
-            :modules="modules"
-            :slides-per-view="4"
-            :space-between="15"
-            :loop="true"
-            :autoplay="{
-              delay: 2000,
-              disableOnInteraction: false,
-            }"
-            :speed="1000"
-            :breakpoints="{
-              320: { slidesPerView: 2, spaceBetween: 10 },
-              480: { slidesPerView: 3, spaceBetween: 12 },
-              640: { slidesPerView: 4, spaceBetween: 15 }
-            }"
-            class="gifts-swiper"
-          >
-            <SwiperSlide v-for="gift in gifts" :key="gift.id">
-              <motion.div 
-                class="gift-card"
-                :whileHover="{ scale: 1.05, y: -5 }"
-              >
-                <img :src="gift.image" :alt="gift.name" class="gift-image" />
-                <div class="gift-name">{{ gift.name }}</div>
-              </motion.div>
-            </SwiperSlide>
-          </Swiper>
-        </motion.div>
+        <GiftCarousel :gifts="gifts" />
 
-        <motion.div 
-          class="excitement-chips"
-          :initial="{ opacity: 0 }"
-          :animate="{ opacity: 1 }"
-          :transition="{ delay: 0.3 }"
-        >
-          <motion.div 
-            class="chip"
-            :animate="{ scale: [1, 1.05, 1] }"
-            :transition="{ duration: 1.5, repeat: Infinity, delay: 0 }"
-          >
-            💵 Instant Cash
-          </motion.div>
-          <motion.div 
-            class="chip"
-            :animate="{ scale: [1, 1.05, 1] }"
-            :transition="{ duration: 1.5, repeat: Infinity, delay: 0.3 }"
-          >
-            🎁 Free Gifts
-          </motion.div>
-          <motion.div 
-            class="chip"
-            :animate="{ scale: [1, 1.05, 1] }"
-            :transition="{ duration: 1.5, repeat: Infinity, delay: 0.6 }"
-          >
-            🏆 Big Prizes
-          </motion.div>
-        </motion.div>
+        <ExcitementChips />
         
-        <motion.div 
-          class="form-container"
-          :initial="{ opacity: 0, scale: 0.95 }"
-          :animate="{ opacity: 1, scale: 1 }"
-          :transition="{ duration: 0.6, delay: 0.4 }"
-        >
-          <div class="form-glow"></div>
-          
-          <motion.button
-            class="scan-qr-button"
-            @click="openScanner"
-            :whileHover="{ scale: 1.02, backgroundColor: '#f0fdf4' }"
-            :whileTap="{ scale: 0.98 }"
-          >
-            <span class="scan-icon">📷</span>
-            <strong>{{ t('scan.scanButton') }}</strong>
-          </motion.button>
-          
-          <div class="divider or-divider">
-            <span>{{ t('scan.orEnterCode') }}</span>
-          </div>
-          
-          <input v-model="honeypot" type="text" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off" />
-          
-          <div class="input-wrapper">
-            <BaseInput
-              v-model="scannedCode"
-              type="text"
-              :placeholder="t('scan.placeholder')"
-              maxlength="12"
-              :error="error"
-              style="text-transform: uppercase"
-            />
-          </div>
-          
-          <motion.div
-            :whileHover="{ scale: 1.02 }"
-            :whileTap="{ scale: 0.98 }"
-          >
-            <BaseButton 
-              @click="validateCode"
-              :loading="loading"
-              :disabled="scannedCode.length !== 12"
-              class="check-button"
-            >
-              <span v-if="!loading" class="button-content">
-                <span class="button-icon">🎯</span>
-                {{ t('scan.submit') }}
-                <span class="button-shine"></span>
-              </span>
-            </BaseButton>
-          </motion.div>
-          
-          <div class="divider">
-            <span>{{ t('scan.loginPrompt') }}</span>
-          </div>
-          
-          <motion.button 
-            class="login-link"
-            @click="handleLoginClick"
-            :whileHover="{ scale: 1.02, backgroundColor: '#f0fdf4' }"
-            :whileTap="{ scale: 0.98 }"
-          >
-            <span class="login-icon">👤</span>
-            <strong>{{ t('scan.loginButton') }}</strong>
-          </motion.button>
-        </motion.div>
+        <ScanForm
+          :scanned-code="scannedCode"
+          :error="error"
+          :loading="loading"
+          @scan-qr="openScanner"
+          @validate-code="validateCode"
+          @login-click="handleLoginClick"
+        />
 
-        <motion.div 
-          class="winner-showcase"
-          :initial="{ opacity: 0, y: 20 }"
-          :animate="{ opacity: 1, y: 0 }"
-          :transition="{ delay: 0.6 }"
-        >
-          <div class="winner-badge">🏅 Recent Winners</div>
-          <div class="winners-scroll">
-            <motion.div 
-              class="winner-item"
-              :animate="{ x: [-300, 0] }"
-              :transition="{ duration: 20, repeat: Infinity, ease: 'linear' }"
-            >
-              <span>Raj K. won <strong>₹500</strong> 💰</span>
-              <span>Priya S. won <strong>Mixer</strong> 🥤</span>
-              <span>Amit P. won <strong>₹1000</strong> 💵</span>
-            </motion.div>
-          </div>
-        </motion.div>
+        <WinnerShowcase />
       </div>
       
       <div v-if="step === 'scratch'" class="scratch-container">
@@ -9475,54 +14952,11 @@ const claimReward = async () => {
       <p>{{ t('common.loading') }}</p>
     </div>
 
-    <!-- *** FIXED: QR Scanner Modal with all enhancements *** -->
-    <div v-if="showScanner" class="scanner-modal">
-      <QrcodeStream
-        @detect="onDetect"
-        @init="onScannerInit"
-        @error="onScannerError"
-        @camera-on="onCameraReady"
-        :constraints="cameraConstraints"
-        :formats="barcodeFormats"
-        :track="paintOutline"
-        class="scanner-video"
-      />
-      
-      <button @click="closeScanner" class="close-scanner-btn" aria-label="Close scanner">
-        ✕
-      </button>
-      
-      <div class="scanner-overlay-content">
-        <div class="scanner-box">
-          <div class="scanner-corners">
-            <div class="corner corner-tl"></div>
-            <div class="corner corner-tr"></div>
-            <div class="corner corner-bl"></div>
-            <div class="corner corner-br"></div>
-          </div>
-          <div class="scanner-line"></div>
-        </div>
-        
-        <div class="scanner-instructions">
-          <p v-if="!cameraReady" class="scanner-text loading-text">
-            {{ t('scan.initializingCamera') || 'Initializing camera...' }}
-          </p>
-          <p v-else class="scanner-text">
-            {{ t('scan.scannerPrompt') || 'Position QR code within the frame' }}
-          </p>
-        </div>
-        
-        <div v-if="scannerError" class="scanner-error-display">
-          <span class="error-icon">⚠️</span>
-          {{ scannerError }}
-        </div>
-        
-        <div v-if="cameraReady" class="scanner-status">
-          <span class="status-indicator active"></span>
-          <span class="status-text">Camera Active</span>
-        </div>
-      </div>
-    </div>
+    <QRScannerModal
+      :show="showScanner"
+      @detect="onDetect"
+      @close="closeScanner"
+    />
   </div>
 </template>
 
@@ -10388,6 +15822,413 @@ const testStores = () => {
 
 ================================================================================
 
+src/views/WalletPage.vue
+{code}
+<script setup>
+import { ref, onMounted, computed } from 'vue'
+import { motion } from 'motion-v'
+
+// Import Common Components
+import GlobalHeader from '@/components/common/GlobalHeader.vue'
+import FloatingActions from '@/components/common/FloatingActions.vue'
+import HelpModal from '@/components/common/HelpModal.vue'
+import LanguageModal from '@/components/common/LanguageModal.vue'
+
+// Import APIs
+import { walletAPI } from '@/api/endpoints'
+
+// --- Stores ---
+const walletStore = useWalletStore()
+const { t } = useLanguage()
+
+// --- Page State ---
+const showHelpModal = ref(false)
+const showLanguageModal = ref(false)
+const loading = ref(true)
+const walletData = ref(null)
+const error = ref('')
+
+// --- Computed Properties ---
+const walletBalance = computed(() => walletData.value?.current_balance || 0)
+const formattedBalance = computed(() => `₹${walletBalance.value.toFixed(2)}`)
+const transactions = computed(() => walletData.value?.transactions?.data || [])
+
+// --- Methods ---
+const fetchWalletData = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    const response = await walletAPI.getWallet()
+    walletData.value = response
+  } catch (err) {
+    console.error('Failed to fetch wallet data:', err)
+    error.value = err.message || 'Failed to load wallet data'
+  } finally {
+    loading.value = false
+  }
+}
+
+const formatDate = (dateString) => {
+  return new Date(dateString).toLocaleDateString('en-IN', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const getTransactionTypeColor = (type) => {
+  const colors = {
+    'earn': '#10b981',
+    'redeem': '#f59e0b'
+  }
+  return colors[type] || '#6b7280'
+}
+
+// --- Lifecycle ---
+onMounted(() => {
+  fetchWalletData()
+})
+</script>
+
+<template>
+  <div class="wallet-page">
+    <GlobalHeader
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+
+    <div class="content">
+      <motion.h1
+        class="page-title"
+        :initial="{ opacity: 0, y: -20 }"
+        :animate="{ opacity: 1, y: 0 }"
+      >
+        {{ t('wallet.title') }}
+      </motion.h1>
+
+      <AnimatePresence>
+        <motion.div
+          v-if="error"
+          class="error-message"
+          :initial="{ opacity: 0, y: -10 }"
+          :animate="{ opacity: 1, y: 0 }"
+        >
+          {{ error }}
+        </motion.div>
+      </AnimatePresence>
+
+      <!-- Current Balance Section -->
+      <motion.div
+        class="balance-section"
+        :initial="{ opacity: 0, scale: 0.9 }"
+        :animate="{ opacity: 1, scale: 1 }"
+        :transition="{ delay: 0.1 }"
+      >
+        <div class="balance-card">
+          <div class="balance-header">
+            <h2>{{ t('wallet.currentBalance') }}</h2>
+          </div>
+          <div class="balance-amount">
+            <span class="amount">{{ formattedBalance }}</span>
+          </div>
+        </div>
+      </motion.div>
+
+      <!-- Transactions Section -->
+      <motion.div
+        class="transactions-section"
+        :initial="{ opacity: 0, y: 20 }"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{ delay: 0.2 }"
+      >
+        <h2 class="section-title">{{ t('wallet.transactionHistory') }}</h2>
+
+        <div v-if="loading" class="loading">
+          <div class="spinner"></div>
+          <p>{{ t('wallet.loading') }}</p>
+        </div>
+
+        <div v-else-if="transactions.length === 0" class="empty-transactions">
+          <motion.div
+            class="empty-content"
+            :initial="{ opacity: 0, scale: 0.9 }"
+            :animate="{ opacity: 1, scale: 1 }"
+            :transition="{ delay: 0.3 }"
+          >
+            <div class="icon">💰</div>
+            <h3>{{ t('wallet.noTransactions') }}</h3>
+            <p>{{ t('wallet.noTransactionsDesc') }}</p>
+          </motion.div>
+        </div>
+
+        <div v-else class="transactions-list">
+          <motion.div
+            v-for="(transaction, index) in transactions"
+            :key="transaction.id"
+            class="transaction-card card"
+            :initial="{ opacity: 0, x: -20 }"
+            :animate="{ opacity: 1, x: 0 }"
+            :transition="{ delay: 0.3 + index * 0.05 }"
+          >
+            <div class="transaction-header">
+              <div class="transaction-info">
+                <h3 class="transaction-description">{{ transaction.description }}</h3>
+                <p class="transaction-date">{{ formatDate(transaction.date) }}</p>
+              </div>
+              <div class="transaction-amount">
+                <span
+                  class="amount"
+                  :class="{ 'credit': transaction.type === 'earn', 'debit': transaction.type === 'redeem' }"
+                >
+                  ₹{{ transaction.amount }}
+                </span>
+                <span
+                  class="transaction-type"
+                  :style="{ backgroundColor: getTransactionTypeColor(transaction.type) }"
+                >
+                  {{ transaction.type }}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </motion.div>
+    </div>
+
+    <HelpModal
+      :show="showHelpModal"
+      @close="showHelpModal = false"
+    />
+    <LanguageModal
+      :show="showLanguageModal"
+      @close="showLanguageModal = false"
+    />
+
+    <FloatingActions
+      @open-help="showHelpModal = true"
+      @open-language="showLanguageModal = true"
+    />
+  </div>
+</template>
+
+<style scoped>
+.wallet-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  width: 100%;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.balance-section {
+  margin-bottom: 40px;
+}
+
+.balance-card {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-radius: 20px;
+  padding: 40px 30px;
+  text-align: center;
+  color: white;
+  box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+}
+
+.balance-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 10px 0;
+  opacity: 0.9;
+}
+
+.balance-amount .amount {
+  font-size: 48px;
+  font-weight: 800;
+  display: block;
+  margin: 0;
+}
+
+.transactions-section {
+  flex: 1;
+}
+
+.section-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 20px;
+}
+
+.transactions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.transaction-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.transaction-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.transaction-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.transaction-info {
+  flex: 1;
+}
+
+.transaction-description {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 4px 0;
+  line-height: 1.4;
+}
+
+.transaction-date {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.transaction-amount {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.amount {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.amount.credit {
+  color: #10b981;
+}
+
+.amount.debit {
+  color: #ef4444;
+}
+
+.transaction-type {
+  padding: 4px 8px;
+  border-radius: 12px;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.transaction-reference {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 12px;
+}
+
+.transaction-reference p {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+  font-family: monospace;
+}
+
+.empty-transactions {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.empty-content {
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.empty-content .icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.empty-content h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+}
+
+.empty-content p {
+  font-size: 16px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.loading {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(16, 185, 129, 0.2);
+  border-top-color: #10b981;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-message {
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+</style>
+{/code}
+
+================================================================================
+
 tsconfig.json
 {code}
 {
@@ -10478,14 +16319,14 @@ export default defineConfig({
     // Icon support
     Icons({ autoInstall: true }),
     
-    // PWA Configuration - DISABLED IN DEV
+    // PWA Configuration
     VitePWA({
-      registerType: 'prompt',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'robots.txt'],
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'robots.txt'],
       manifest: {
         name: 'Nirva Biolastic Loyalty Program',
-        short_name: 'Nirva',
-        description: 'Scan QR codes, earn cashback, redeem rewards',
+        short_name: 'Nirva Loyalty',
+        description: 'Scan QR codes, earn cashback, redeem rewards with Nirva & Biolastic products',
         theme_color: '#10b981',
         background_color: '#ffffff',
         display: 'standalone',
@@ -10496,18 +16337,28 @@ export default defineConfig({
           {
             src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
+          },
+          {
+            src: 'apple-touch-icon.png',
+            sizes: '180x180',
+            type: 'image/png',
+            purpose: 'any'
           }
         ],
-        categories: ['shopping', 'lifestyle'],
+        categories: ['shopping', 'lifestyle', 'finance'],
         lang: 'en',
-        dir: 'ltr'
+        dir: 'ltr',
+        prefer_related_applications: false,
+        related_applications: [],
+        screenshots: []
       },
       workbox: {
         cleanupOutdatedCaches: true,
@@ -10556,7 +16407,14 @@ export default defineConfig({
     host: true,
     port: 3000,
     strictPort: false,
-    open: false
+    open: false,
+    proxy: {
+      '/storage': {
+        target: 'https://offer-api.nirva-naturals.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/storage/, '/storage')
+      }
+    }
   },
   
   build: {

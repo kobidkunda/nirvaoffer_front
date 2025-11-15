@@ -13,16 +13,23 @@ declare module 'vue' {
   export interface GlobalComponents {
     BaseButton: typeof import('./components/common/BaseButton.vue')['default']
     BaseInput: typeof import('./components/common/BaseInput.vue')['default']
+    ExcitementChips: typeof import('./components/scan/ExcitementChips.vue')['default']
     FloatingActions: typeof import('./components/common/FloatingActions.vue')['default']
+    GiftCarousel: typeof import('./components/scan/GiftCarousel.vue')['default']
     GlobalHeader: typeof import('./components/common/GlobalHeader.vue')['default']
     HelloWorld: typeof import('./components/HelloWorld.vue')['default']
     HelpModal: typeof import('./components/common/HelpModal.vue')['default']
     LanguageModal: typeof import('./components/common/LanguageModal.vue')['default']
     OTPModal: typeof import('./components/common/OTPModal.vue')['default']
+    PrizeBadge: typeof import('./components/scan/PrizeBadge.vue')['default']
+    QRScannerModal: typeof import('./components/scan/QRScannerModal.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    ScanForm: typeof import('./components/scan/ScanForm.vue')['default']
     ScratchCard: typeof import('./components/reward/ScratchCard.vue')['default']
+    SliderComponent: typeof import('./components/common/SliderComponent.vue')['default']
     Toast: typeof import('./components/common/Toast.vue')['default']
     ToastContainer: typeof import('./components/common/ToastContainer.vue')['default']
+    WinnerShowcase: typeof import('./components/scan/WinnerShowcase.vue')['default']
   }
 }
