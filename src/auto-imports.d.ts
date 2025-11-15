@@ -84,6 +84,7 @@ declare global {
   const pausableWatch: typeof import('@vueuse/core').pausableWatch
   const provide: typeof import('vue').provide
   const provideLocal: typeof import('@vueuse/core').provideLocal
+  const provideToast: typeof import('./composables/useToast.js').provideToast
   const reactify: typeof import('@vueuse/core').reactify
   const reactifyObject: typeof import('@vueuse/core').reactifyObject
   const reactive: typeof import('vue').reactive
@@ -283,6 +284,7 @@ declare global {
   const useTitle: typeof import('@vueuse/core').useTitle
   const useToNumber: typeof import('@vueuse/core').useToNumber
   const useToString: typeof import('@vueuse/core').useToString
+  const useToast: typeof import('./composables/useToast.js').useToast
   const useToggle: typeof import('@vueuse/core').useToggle
   const useTransition: typeof import('@vueuse/core').useTransition
   const useUrlSearchParams: typeof import('@vueuse/core').useUrlSearchParams
@@ -407,6 +409,7 @@ declare module 'vue' {
     readonly pausableWatch: UnwrapRef<typeof import('@vueuse/core')['pausableWatch']>
     readonly provide: UnwrapRef<typeof import('vue')['provide']>
     readonly provideLocal: UnwrapRef<typeof import('@vueuse/core')['provideLocal']>
+    readonly provideToast: UnwrapRef<typeof import('./composables/useToast.js')['provideToast']>
     readonly reactify: UnwrapRef<typeof import('@vueuse/core')['reactify']>
     readonly reactifyObject: UnwrapRef<typeof import('@vueuse/core')['reactifyObject']>
     readonly reactive: UnwrapRef<typeof import('vue')['reactive']>
@@ -606,6 +609,7 @@ declare module 'vue' {
     readonly useTitle: UnwrapRef<typeof import('@vueuse/core')['useTitle']>
     readonly useToNumber: UnwrapRef<typeof import('@vueuse/core')['useToNumber']>
     readonly useToString: UnwrapRef<typeof import('@vueuse/core')['useToString']>
+    readonly useToast: UnwrapRef<typeof import('./composables/useToast.js')['useToast']>
     readonly useToggle: UnwrapRef<typeof import('@vueuse/core')['useToggle']>
     readonly useTransition: UnwrapRef<typeof import('@vueuse/core')['useTransition']>
     readonly useUrlSearchParams: UnwrapRef<typeof import('@vueuse/core')['useUrlSearchParams']>
