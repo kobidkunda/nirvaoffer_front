@@ -42,8 +42,7 @@ export default defineConfig({
     // PWA Configuration
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.png', 'apple-touch-icon.png'],
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'robots.txt'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'robots.txt'],
       manifest: {
         name: 'Nirva Biolastic Loyalty Program',
         short_name: 'Nirva Loyalty',
