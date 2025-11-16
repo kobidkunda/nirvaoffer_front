@@ -87,13 +87,25 @@ const confirmCheckout = async () => {
     const response = await cartStore.checkout(checkoutNotes.value || null)
     // Update wallet balance
     walletStore.syncWallet({
-      balance: response.new_wallet_balance,
+      balance: response.remaining_wallet_balance,
       lucky_draw_tickets: walletStore.ticketCount
     })
     showCheckoutModal.value = false
     checkoutNotes.value = ''
-    // Redirect to success page or show success message
-    router.push('/dashboard')
+
+    // Navigate to order success page with order data
+    router.push({
+      name: 'order-success',
+      params: { orderId: response.order.order_id },
+      query: {
+        orderNumber: response.order.order_number,
+        totalAmount: response.order.total_amount,
+        status: response.order.status,
+        itemsCount: response.order.items_count,
+        createdAt: response.order.created_at,
+        remainingBalance: response.remaining_wallet_balance
+      }
+    })
   } catch (error) {
     console.error('Checkout failed:', error)
 

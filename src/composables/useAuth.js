@@ -29,6 +29,7 @@ export function useAuth() {
     user: computed(() => authStore.user),
     login,
     logout,
-    requestOTP: authStore.requestOTP
+    requestOTP: authStore.requestOTP,
+    updateUser: authStore.updateUser
   }
 }

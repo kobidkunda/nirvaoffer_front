@@ -142,8 +142,12 @@ const handleClaim = () => {
 
 const handleLoginClick = () => {
   if (authStore.isLoggedIn) {
-    // If user is logged in, navigate to redeem page
-    router.push('/redeem')
+    // If user is logged in, navigate to redeem page with loading
+    loading.value = true
+    setTimeout(() => {
+      router.push('/redeem')
+      loading.value = false
+    }, 100) // Brief loading to show spinner
   } else {
     // If not logged in, show login modal
     loginMode.value = true

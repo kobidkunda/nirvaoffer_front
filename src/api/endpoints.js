@@ -42,7 +42,14 @@ export const rewardAPI = {
 export const profileAPI = {
   // Get current user profile
   getProfile: () => apiClient('/profile/me'),
-  
+
+  // Update user profile (name and address)
+  updateProfile: (profileData) =>
+    apiClient('/profile/me', {
+      method: 'PUT',
+      body: profileData
+    }),
+
   // Update shipping address
   updateAddress: (address) =>
     apiClient('/profile/address', {

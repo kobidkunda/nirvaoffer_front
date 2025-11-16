@@ -96,11 +96,22 @@
   },
   "profile": {
     "title": "मेरी प्रोफाइल",
+    "personalInfo": "व्यक्तिगत जानकारी",
     "phone": "फ़ोन नंबर",
     "name": "नाम",
     "address": "डिलीवरी का पता",
     "language": "भाषा",
-    "logout": "लॉग आउट"
+    "logout": "लॉग आउट",
+    "edit": "संपादित करें",
+    "add": "जोड़ें",
+    "save": "सेव करें",
+    "notSet": "सेट नहीं है",
+    "noAddress": "कोई पता सेट नहीं है",
+    "editProfile": "प्रोफाइल संपादित करें",
+    "editAddress": "पता संपादित करें",
+    "addAddress": "पता जोड़ें",
+    "fullName": "पूरा नाम",
+    "fullNamePlaceholder": "अपना पूरा नाम दर्ज करें"
   },
   "cart": {
     "cart": "कार्ट",
@@ -175,6 +186,23 @@
     "back": "शॉप पर वापस जाएं",
     "products": "उत्पाद",
     "noProducts": "इस श्रेणी में कोई उत्पाद उपलब्ध नहीं है।"
+  },
+  "orderSuccess": {
+    "title": "ऑर्डर सफलतापूर्वक दिया गया! 🎉",
+    "subtitle": "आपका ऑर्डर कन्फर्म हो गया है",
+    "orderNumber": "ऑर्डर नंबर",
+    "orderId": "ऑर्डर ID",
+    "totalAmount": "कुल राशि",
+    "itemsCount": "ऑर्डर किए गए आइटम",
+    "remainingBalance": "शेष वॉलेट बैलेंस",
+    "orderDate": "ऑर्डर की तारीख",
+    "status": "स्टेटस",
+    "thankYou": "हमारे साथ खरीदारी करने के लिए धन्यवाद!",
+    "orderDetails": "ऑर्डर विवरण",
+    "continueShopping": "खरीदारी जारी रखें",
+    "viewOrders": "मेरे ऑर्डर देखें",
+    "estimatedDelivery": "अनुमानित डिलीवरी: 3-5 कार्य दिवस",
+    "emailConfirmation": "आपको जल्द ही एक ईमेल पुष्टि प्राप्त होगी।"
   },
   "menu": {
     "myProfile": "मेरी प्रोफाइल",

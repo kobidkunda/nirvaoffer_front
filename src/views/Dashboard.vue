@@ -5,7 +5,8 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useWalletStore } from '@/stores/wallet'
 import { useLanguage } from '@/composables/useLanguage'
-import { motion } from 'motion-v'
+import { profileAPI } from '@/api/endpoints'
+import { motion, AnimatePresence } from 'motion-v'
 import GlobalHeader from '@/components/common/GlobalHeader.vue'
 import HelpModal from '@/components/common/HelpModal.vue'
 import LanguageModal from '@/components/common/LanguageModal.vue'
@@ -19,6 +20,10 @@ const { t } = useLanguage()
 const loading = ref(false)
 const showHelpModal = ref(false)
 const showLanguageModal = ref(false)
+const showNameModal = ref(false)
+const nameInput = ref('')
+const updatingName = ref(false)
+const nameError = ref('')
 
 const userName = computed(() => authStore.user?.name || 'Friend')
 
@@ -26,12 +31,17 @@ onMounted(async () => {
   loading.value = true
   try {
     await authStore.fetchProfile()
-    
+
     if (authStore.user?.wallet_balance !== undefined) {
       walletStore.syncWallet({
         balance: authStore.user.wallet_balance,
         lucky_draw_tickets: authStore.user.lucky_draw_tickets || 0
       })
+    }
+
+    // Check if name is missing and show modal
+    if (!authStore.user?.name || authStore.user.name.trim() === '') {
+      showNameModal.value = true
     }
   } catch (error) {
     console.error('Failed to fetch profile:', error)
@@ -43,6 +53,31 @@ onMounted(async () => {
 const scanAnother = () => router.push('/')
 const goToRedeem = () => router.push('/redeem')
 const goToProfile = () => router.push('/profile')
+
+const updateName = async () => {
+  if (!nameInput.value.trim()) {
+    nameError.value = 'Please enter your name'
+    return
+  }
+
+  updatingName.value = true
+  nameError.value = ''
+
+  try {
+    await profileAPI.updateProfile({
+      name: nameInput.value.trim()
+    })
+
+    // Refresh profile to get updated data
+    await authStore.fetchProfile()
+    showNameModal.value = false
+    nameInput.value = ''
+  } catch (error) {
+    nameError.value = error.response?.data?.message || error.message || 'Failed to update name'
+  } finally {
+    updatingName.value = false
+  }
+}
 </script>
 
 <template>
@@ -144,11 +179,56 @@ const goToProfile = () => router.push('/profile')
       :show="showHelpModal"
       @close="showHelpModal = false"
     />
-    
+
     <LanguageModal
       :show="showLanguageModal"
       @close="showLanguageModal = false"
     />
+
+    <!-- Name Required Modal -->
+    <AnimatePresence>
+      <motion.div
+        v-if="showNameModal"
+        class="modal-overlay"
+        :initial="{ opacity: 0 }"
+        :animate="{ opacity: 1 }"
+        :exit="{ opacity: 0 }"
+      >
+        <motion.div
+          class="modal-content name-modal"
+          :initial="{ scale: 0.9, opacity: 0 }"
+          :animate="{ scale: 1, opacity: 1 }"
+          :exit="{ scale: 0.9, opacity: 0 }"
+        >
+          <div class="modal-header">
+            <h2>{{ t('auth.enterName') }}</h2>
+            <p>Please enter your name to continue using the app.</p>
+          </div>
+
+          <form @submit.prevent="updateName" class="name-form">
+            <BaseInput
+              v-model="nameInput"
+              :label="t('auth.nameLabel')"
+              :placeholder="t('auth.namePlaceholder')"
+              required
+              autofocus
+            />
+
+            <div v-if="nameError" class="error-message">
+              {{ nameError }}
+            </div>
+
+            <BaseButton
+              type="submit"
+              :loading="updatingName"
+              size="large"
+            >
+              {{ t('common.save') }}
+            </BaseButton>
+          </form>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   </div>
 </template>
 
@@ -281,5 +361,73 @@ const goToProfile = () => router.push('/profile')
 
 .scan-section {
   margin-top: 32px;
+}
+
+/* Name Modal Styles */
+.name-modal {
+  max-width: 400px;
+}
+
+.modal-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.modal-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 8px 0;
+}
+
+.modal-header p {
+  color: #6b7280;
+  font-size: 14px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.name-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.name-form .base-button {
+  margin-top: 8px;
+}
+
+.error-message {
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 </style>

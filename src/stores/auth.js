@@ -52,6 +52,10 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
+    updateUser(userData) {
+      this.user = { ...this.user, ...userData }
+    },
+
     async updateAddress(address) {
       try {
         const response = await profileAPI.updateAddress(address)
